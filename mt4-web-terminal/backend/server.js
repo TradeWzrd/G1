@@ -86,12 +86,38 @@ app.post('/api/mt4/update', (req, res) => {
 // Trade endpoint
 app.post('/api/trade', (req, res) => {
     try {
-        const command = req.body;
-        console.log('Trade command:', command);
-        res.send('CMD:' + command);
+        const { action, symbol, lots, stopLoss, takeProfit, ticket, type } = req.body;
+        let command = '';
+
+        switch(action) {
+            case 'open':
+                command = `${type === 0 ? 'BUY' : 'SELL'},${symbol},${lots},${stopLoss || 0},${takeProfit || 0}`;
+                break;
+            case 'close':
+                command = `CLOSE,${ticket}`;
+                break;
+            case 'modify':
+                command = `MODIFY,${ticket},${stopLoss || 0},${takeProfit || 0}`;
+                break;
+            case 'closeAll':
+                command = `CLOSEALL${type !== undefined ? ',' + type : ''}`;
+                break;
+        }
+
+        console.log('Generated command:', command);
+        
+        // Send JSON response
+        res.json({ 
+            success: true,
+            message: 'Command sent successfully',
+            command: command
+        });
     } catch (error) {
         console.error('Trade error:', error);
-        res.send('ERROR:' + error.message);
+        res.json({ 
+            success: false,
+            error: error.message 
+        });
     }
 });
 

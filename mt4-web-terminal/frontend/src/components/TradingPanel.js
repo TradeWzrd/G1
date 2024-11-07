@@ -45,13 +45,12 @@ const TradingPanel = ({ positions = [] }) => {
                 body: JSON.stringify({
                     action: 'open',
                     type, // 0 for BUY, 1 for SELL
-                    ...newOrder
+                    symbol: newOrder.symbol,
+                    lots: newOrder.lots,
+                    stopLoss: newOrder.stopLoss,
+                    takeProfit: newOrder.takeProfit
                 })
             });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
 
             const data = await response.json();
             if (data.success) {
@@ -77,10 +76,6 @@ const TradingPanel = ({ positions = [] }) => {
                     ticket
                 })
             });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
 
             const data = await response.json();
             if (data.success) {
@@ -109,10 +104,6 @@ const TradingPanel = ({ positions = [] }) => {
                 })
             });
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
             const data = await response.json();
             if (data.success) {
                 setSuccess('Position modified successfully!');
@@ -138,10 +129,6 @@ const TradingPanel = ({ positions = [] }) => {
                     type
                 })
             });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
 
             const data = await response.json();
             if (data.success) {
