@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cn } from "@/lib/utils";  // Updated import path
+import { cn } from "../../lib/utils";  // Updated import path
 
 const Alert = React.forwardRef(({ className, variant, ...props }, ref) => (
   <div
