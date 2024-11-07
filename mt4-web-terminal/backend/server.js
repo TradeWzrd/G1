@@ -11,8 +11,12 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Custom JSON parsing middleware
-app.use(express.text({ type: 'application/json' }), (req, res, next) => {
+// Middleware
+app.use(cors());
+app.use(morgan('dev'));
+
+// Raw body parser for MT4 requests
+app.use('/api/mt4/update', express.text({ type: 'application/json' }), (req, res, next) => {
     try {
         if (req.body) {
             req.body = JSON.parse(req.body);
@@ -21,12 +25,12 @@ app.use(express.text({ type: 'application/json' }), (req, res, next) => {
     } catch (error) {
         console.error('JSON Parse Error:', error);
         console.log('Raw Body:', req.body);
-        res.status(400).json({ error: 'Invalid JSON' });
+        res.status(400).json({ error: 'Invalid JSON', details: error.message });
     }
 });
 
-app.use(cors());
-app.use(morgan('dev'));
+// Regular JSON parser for other routes
+app.use(express.json());
 
 // Store connected clients and EA data
 const clients = new Set();
@@ -36,7 +40,12 @@ let eaConnected = false;
 // MT4 update endpoint
 app.post('/api/mt4/update', (req, res) => {
     try {
-        console.log('Received MT4 update:', req.body);
+        console.log('Received MT4 update:', typeof req.body, req.body);
+        
+        if (!req.body || typeof req.body !== 'object') {
+            throw new Error('Invalid data format');
+        }
+
         lastEAUpdate = req.body;
         eaConnected = true;
 
@@ -47,7 +56,10 @@ app.post('/api/mt4/update', (req, res) => {
             data: lastEAUpdate
         });
 
-        res.json({ success: true });
+        res.json({ 
+            success: true,
+            commands: [] // Empty array of pending commands
+        });
     } catch (error) {
         console.error('Error processing MT4 update:', error);
         res.status(500).json({ error: error.message });
@@ -70,6 +82,10 @@ wss.on('connection', (ws) => {
         console.log('Client disconnected');
         clients.delete(ws);
     });
+
+    ws.on('error', (error) => {
+        console.error('WebSocket error:', error);
+    });
 });
 
 // Broadcast to all clients
@@ -77,7 +93,11 @@ function broadcast(data) {
     const message = JSON.stringify(data);
     clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
-            client.send(message);
+            try {
+                client.send(message);
+            } catch (error) {
+                console.error('Broadcast error:', error);
+            }
         }
     });
 }
@@ -87,34 +107,14 @@ app.get('/api/trade/pending', (req, res) => {
     res.json({ commands: [] });
 });
 
-app.post('/api/trade', (req, res) => {
-    try {
-        const command = {
-            id: Date.now().toString(),
-            ...req.body,
-            status: 'pending',
-            timestamp: new Date()
-        };
-        console.log('New trade command:', command);
-        res.json({ success: true, commandId: command.id });
-    } catch (error) {
-        console.error('Trade error:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.post('/api/trade/status', (req, res) => {
-    console.log('Trade status update:', req.body);
-    res.json({ success: true });
-});
-
 // Test endpoint
 app.get('/ping', (req, res) => {
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
         eaConnected,
-        clientsCount: clients.size
+        clientsCount: clients.size,
+        lastUpdate: lastEAUpdate ? new Date(lastEAUpdate.timestamp).toISOString() : null
     });
 });
 
