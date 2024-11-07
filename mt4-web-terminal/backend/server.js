@@ -25,13 +25,24 @@ app.use(morgan('dev'));
 app.use(express.json());
 
 // MT4 update endpoint
-app.post('/api/mt4/update', (req, res) => {
+app.post('/api/mt4/update', express.text({ type: 'application/json' }), (req, res) => {
     try {
-        console.log('Received MT4 update:', req.body);
-        lastEAUpdate = req.body;
+        // Log raw data
+        console.log('Raw data received:', req.body);
+        
+        // Parse and validate JSON
+        const data = JSON.parse(req.body);
+        console.log('Parsed data:', data);
+
+        if (!data || !data.source || data.source !== 'EA') {
+            throw new Error('Invalid data format');
+        }
+
+        // Update state
+        lastEAUpdate = data;
         eaConnected = true;
 
-        // Send any pending commands
+        // Get pending commands
         const pendingCommands = Array.from(tradeCommands.values())
             .filter(cmd => cmd.status === 'pending');
 
@@ -42,14 +53,16 @@ app.post('/api/mt4/update', (req, res) => {
             data: lastEAUpdate
         });
 
+        // Send response
         res.json({ 
             success: true,
             commands: pendingCommands
         });
     } catch (error) {
         console.error('Error processing MT4 update:', error);
+        console.log('Data that caused error:', req.body);
         res.status(200).json({ 
-            success: false, 
+            success: false,
             error: error.message,
             commands: []
         });
