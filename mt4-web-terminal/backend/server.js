@@ -11,22 +11,40 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// Clean JSON string
+function cleanJsonString(str) {
+    return str
+        .replace(/[\u0000-\u0019]+/g, "")
+        .replace(/\r/g, "")
+        .replace(/\n/g, "")
+        .trim();
+}
+
 // Middleware
 app.use(cors());
 app.use(morgan('dev'));
 
-// Raw body parser for MT4 requests
-app.use('/api/mt4/update', express.text({ type: 'application/json' }), (req, res, next) => {
-    try {
-        if (req.body) {
-            req.body = JSON.parse(req.body);
+// Custom middleware for MT4 updates
+app.use('/api/mt4/update', (req, res, next) => {
+    let data = '';
+    req.setEncoding('utf8');
+    
+    req.on('data', chunk => {
+        data += chunk;
+    });
+    
+    req.on('end', () => {
+        try {
+            const cleanData = cleanJsonString(data);
+            console.log('Cleaned data:', cleanData);
+            req.body = JSON.parse(cleanData);
+            next();
+        } catch (error) {
+            console.error('JSON Parse Error:', error);
+            console.log('Raw data:', data);
+            res.status(400).json({ error: 'Invalid JSON' });
         }
-        next();
-    } catch (error) {
-        console.error('JSON Parse Error:', error);
-        console.log('Raw Body:', req.body);
-        res.status(400).json({ error: 'Invalid JSON', details: error.message });
-    }
+    });
 });
 
 // Regular JSON parser for other routes
@@ -40,12 +58,7 @@ let eaConnected = false;
 // MT4 update endpoint
 app.post('/api/mt4/update', (req, res) => {
     try {
-        console.log('Received MT4 update:', typeof req.body, req.body);
-        
-        if (!req.body || typeof req.body !== 'object') {
-            throw new Error('Invalid data format');
-        }
-
+        console.log('Received MT4 update:', req.body);
         lastEAUpdate = req.body;
         eaConnected = true;
 
@@ -58,7 +71,7 @@ app.post('/api/mt4/update', (req, res) => {
 
         res.json({ 
             success: true,
-            commands: [] // Empty array of pending commands
+            commands: []
         });
     } catch (error) {
         console.error('Error processing MT4 update:', error);
@@ -113,8 +126,7 @@ app.get('/ping', (req, res) => {
         status: 'ok',
         timestamp: new Date().toISOString(),
         eaConnected,
-        clientsCount: clients.size,
-        lastUpdate: lastEAUpdate ? new Date(lastEAUpdate.timestamp).toISOString() : null
+        clientsCount: clients.size
     });
 });
 
