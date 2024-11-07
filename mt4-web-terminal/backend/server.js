@@ -11,55 +11,25 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Clean JSON string
-function cleanJsonString(str) {
-    return str
-        .replace(/[\u0000-\u0019]+/g, "")
-        .replace(/\r/g, "")
-        .replace(/\n/g, "")
-        .trim();
-}
-
-// Middleware
-app.use(cors());
-app.use(morgan('dev'));
-
-// Custom middleware for MT4 updates
-app.use('/api/mt4/update', (req, res, next) => {
-    let data = '';
-    req.setEncoding('utf8');
-    
-    req.on('data', chunk => {
-        data += chunk;
-    });
-    
-    req.on('end', () => {
-        try {
-            const cleanData = cleanJsonString(data);
-            console.log('Cleaned data:', cleanData);
-            req.body = JSON.parse(cleanData);
-            next();
-        } catch (error) {
-            console.error('JSON Parse Error:', error);
-            console.log('Raw data:', data);
-            res.status(400).json({ error: 'Invalid JSON' });
-        }
-    });
-});
-
-// Regular JSON parser for other routes
-app.use(express.json());
-
 // Store connected clients and EA data
 const clients = new Set();
 let lastEAUpdate = null;
 let eaConnected = false;
 
-// MT4 update endpoint
-app.post('/api/mt4/update', (req, res) => {
+// Middleware
+app.use(cors());
+app.use(morgan('dev'));
+
+// Use raw body parser for MT4 endpoint
+app.post('/api/mt4/update', express.raw({ type: 'application/json' }), (req, res) => {
     try {
-        console.log('Received MT4 update:', req.body);
-        lastEAUpdate = req.body;
+        const jsonString = req.body.toString('utf8');
+        console.log('Received raw data:', jsonString);
+        
+        const data = JSON.parse(jsonString);
+        console.log('Parsed data:', data);
+
+        lastEAUpdate = data;
         eaConnected = true;
 
         // Broadcast to WebSocket clients
@@ -69,17 +39,24 @@ app.post('/api/mt4/update', (req, res) => {
             data: lastEAUpdate
         });
 
+        // Send response to EA
         res.json({ 
             success: true,
-            commands: []
+            commands: [] 
         });
     } catch (error) {
         console.error('Error processing MT4 update:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ 
+            error: error.message,
+            success: false 
+        });
     }
 });
 
-// WebSocket handler
+// Use regular JSON parser for other routes
+app.use(express.json());
+
+// WebSocket connection handler
 wss.on('connection', (ws) => {
     console.log('New client connected');
     clients.add(ws);
@@ -95,13 +72,9 @@ wss.on('connection', (ws) => {
         console.log('Client disconnected');
         clients.delete(ws);
     });
-
-    ws.on('error', (error) => {
-        console.error('WebSocket error:', error);
-    });
 });
 
-// Broadcast to all clients
+// Broadcast function
 function broadcast(data) {
     const message = JSON.stringify(data);
     clients.forEach(client => {
@@ -115,9 +88,24 @@ function broadcast(data) {
     });
 }
 
-// Trade routes
+// Trade endpoints
 app.get('/api/trade/pending', (req, res) => {
     res.json({ commands: [] });
+});
+
+app.post('/api/trade', (req, res) => {
+    try {
+        const command = {
+            id: Date.now().toString(),
+            ...req.body,
+            status: 'pending'
+        };
+        console.log('New trade command:', command);
+        res.json({ success: true, commandId: command.id });
+    } catch (error) {
+        console.error('Trade error:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // Test endpoint
