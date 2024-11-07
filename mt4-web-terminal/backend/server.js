@@ -16,136 +16,94 @@ const clients = new Set();
 let lastEAUpdate = null;
 let eaConnected = false;
 
-// Store trade commands
-const tradeCommands = new Map();
+// Clean and validate JSON
+function cleanAndParseJSON(data) {
+    try {
+        // Remove any BOM and non-printable characters
+        let cleaned = data.toString()
+            .replace(/^\uFEFF/, '')
+            .replace(/[\u0000-\u001F]/g, '')
+            .replace(/[\u007F-\u009F]/g, '')
+            .replace(/\\/g, '\\\\')
+            .trim();
+
+        // Log the cleaned data
+        console.log('Cleaned data:', cleaned);
+
+        // Parse the JSON
+        return JSON.parse(cleaned);
+    } catch (error) {
+        console.error('JSON cleaning/parsing error:', error);
+        throw error;
+    }
+}
 
 // Middleware
 app.use(cors());
 app.use(morgan('dev'));
-app.use(express.json());
 
-// MT4 update endpoint
-app.post('/api/mt4/update', express.text({ type: 'application/json' }), (req, res) => {
-    try {
-        // Log raw data
-        console.log('Raw data received:', req.body);
-        
-        // Parse and validate JSON
-        const data = JSON.parse(req.body);
-        console.log('Parsed data:', data);
-
-        if (!data || !data.source || data.source !== 'EA') {
-            throw new Error('Invalid data format');
-        }
-
-        // Update state
-        lastEAUpdate = data;
-        eaConnected = true;
-
-        // Get pending commands
-        const pendingCommands = Array.from(tradeCommands.values())
-            .filter(cmd => cmd.status === 'pending');
-
-        // Broadcast to WebSocket clients
-        broadcast({
-            type: 'update',
-            connected: true,
-            data: lastEAUpdate
-        });
-
-        // Send response
-        res.json({ 
-            success: true,
-            commands: pendingCommands
-        });
-    } catch (error) {
-        console.error('Error processing MT4 update:', error);
-        console.log('Data that caused error:', req.body);
-        res.status(200).json({ 
-            success: false,
-            error: error.message,
-            commands: []
-        });
-    }
-});
-
-// Trade endpoints
-app.post('/api/trade', (req, res) => {
-    try {
-        const command = {
-            id: Date.now().toString(),
-            status: 'pending',
-            timestamp: new Date(),
-            ...req.body
-        };
-
-        console.log('Received trade command:', command);
-        tradeCommands.set(command.id, command);
-
-        // Clean up old commands
-        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-        for (const [id, cmd] of tradeCommands) {
-            if (cmd.timestamp < fiveMinutesAgo) {
-                tradeCommands.delete(id);
-            }
-        }
-
-        res.json({
-            success: true,
-            message: 'Trade command queued',
-            commandId: command.id
-        });
-    } catch (error) {
-        console.error('Trade error:', error);
-        res.status(200).json({ 
-            success: false, 
-            error: error.message 
-        });
-    }
-});
-
-// Get pending trade commands
-app.get('/api/trade/pending', (req, res) => {
-    const pendingCommands = Array.from(tradeCommands.values())
-        .filter(cmd => cmd.status === 'pending');
-    res.json({ commands: pendingCommands });
-});
-
-// Update trade command status
-app.post('/api/trade/status', (req, res) => {
-    try {
-        const { commandId, status, result } = req.body;
-        
-        if (tradeCommands.has(commandId)) {
-            const command = tradeCommands.get(commandId);
-            command.status = status;
-            command.result = result;
-            tradeCommands.set(commandId, command);
+// Custom middleware for MT4 updates
+app.post('/api/mt4/update', (req, res) => {
+    let data = '';
+    
+    req.on('data', chunk => {
+        data += chunk;
+    });
+    
+    req.on('end', () => {
+        try {
+            console.log('Received raw data:', data);
             
-            console.log('Updated command status:', command);
+            // Clean and parse the data
+            const parsedData = cleanAndParseJSON(data);
+            console.log('Parsed data:', parsedData);
+            
+            // Update state
+            lastEAUpdate = parsedData;
+            eaConnected = true;
+            
+            // Broadcast to WebSocket clients
+            broadcast({
+                type: 'update',
+                connected: true,
+                data: lastEAUpdate
+            });
+            
+            // Send success response
+            res.json({
+                success: true,
+                commands: []
+            });
+        } catch (error) {
+            console.error('Error processing data:', error);
+            console.log('Data that caused error:', data);
+            res.status(200).json({ 
+                success: false,
+                error: error.message,
+                commands: []
+            });
         }
-        
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Status update error:', error);
-        res.status(200).json({ 
-            success: false, 
-            error: error.message 
-        });
-    }
+    });
 });
+
+// Regular JSON parser for other routes
+app.use(express.json());
 
 // WebSocket connection handler
 wss.on('connection', (ws) => {
     console.log('New client connected');
     clients.add(ws);
 
-    // Send initial state
-    ws.send(JSON.stringify({
-        type: 'status',
-        connected: eaConnected,
-        data: lastEAUpdate
-    }));
+    // Send current state
+    try {
+        ws.send(JSON.stringify({
+            type: 'status',
+            connected: eaConnected,
+            data: lastEAUpdate
+        }));
+    } catch (error) {
+        console.error('Error sending initial state:', error);
+    }
 
     ws.on('close', () => {
         console.log('Client disconnected');
@@ -166,6 +124,27 @@ function broadcast(data) {
         }
     });
 }
+
+// Trade endpoints
+app.post('/api/trade', (req, res) => {
+    try {
+        console.log('Received trade command:', req.body);
+        res.json({
+            success: true,
+            message: 'Trade command received'
+        });
+    } catch (error) {
+        console.error('Trade error:', error);
+        res.status(200).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+app.get('/api/trade/pending', (req, res) => {
+    res.json({ commands: [] });
+});
 
 // Test endpoint
 app.get('/ping', (req, res) => {
