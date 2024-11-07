@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, XAxis, YAxis, Tooltip, Line } from 'recharts';
+import TradingPanel from './TradingPanel'; // Import TradingPanel component
 
 const WebTerminal = () => {
     const [accountData, setAccountData] = useState(null);
@@ -140,6 +141,13 @@ const WebTerminal = () => {
                     <p className="text-gray-500">Waiting for EA connection...</p>
                 )}
             </div>
+
+            {/* Trading Panel */}
+            {eaConnected && (
+                <TradingPanel
+                    positions={accountData?.positions || []}
+                />
+            )}
 
             {/* Debug Information */}
             <div className="bg-gray-50 p-4 rounded-md">
