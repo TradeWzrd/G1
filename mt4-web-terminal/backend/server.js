@@ -26,33 +26,36 @@ function cleanJSONString(str) {
               .trim();
 }
 
+// WebSocket broadcast function
+function broadcastUpdate(data) {
+    const message = JSON.stringify({
+        type: 'update',
+        connected: true,
+        data: data.account
+    });
+
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            console.log('Broadcasting to client:', message);
+            client.send(message);
+        }
+    });
+}
+
 // Handle MT4 updates
 app.post('/api/mt4/update', (req, res) => {
     try {
-        // Clean and parse the JSON
         const cleanData = cleanJSONString(req.body);
-        console.log('Received data length:', cleanData.length);
-        console.log('Cleaned data:', cleanData);
+        console.log('Received data:', cleanData);
         
         const data = JSON.parse(cleanData);
-        console.log('Parsed data:', data);
-
+        
         if (data.source === 'EA') {
             eaConnected = true;
             lastEAData = data;
             
-            // Broadcast to all WebSocket clients
-            const message = JSON.stringify({
-                type: 'update',
-                connected: true,
-                data: data.account
-            });
-            
-            wss.clients.forEach(client => {
-                if (client.readyState === WebSocket.OPEN) {
-                    client.send(message);
-                }
-            });
+            // Broadcast update to all connected clients
+            broadcastUpdate(data);
             
             res.json({ success: true });
         } else {
@@ -60,8 +63,7 @@ app.post('/api/mt4/update', (req, res) => {
         }
     } catch (error) {
         console.error('Error processing MT4 update:', error);
-        console.error('Raw data:', req.body);
-        res.status(500).json({ error: 'Internal server error', details: error.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -70,12 +72,16 @@ wss.on('connection', (ws) => {
     console.log('New WebSocket client connected');
     clients.add(ws);
     
-    // Send current EA status
+    // Send initial status
     ws.send(JSON.stringify({
         type: 'status',
         connected: eaConnected,
         data: lastEAData ? lastEAData.account : null
     }));
+    
+    ws.on('message', (message) => {
+        console.log('Received WebSocket message:', message.toString());
+    });
     
     ws.on('close', () => {
         console.log('Client disconnected');

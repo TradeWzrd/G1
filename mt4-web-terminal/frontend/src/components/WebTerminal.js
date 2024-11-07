@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, XAxis, YAxis, Tooltip, Line } from 'recharts';
 
-const BACKEND_WS_URL = 'ws://localhost:3000';
-const BACKEND_HTTP_URL = 'http://localhost:3000';
-
 const WebTerminal = () => {
     const [accountData, setAccountData] = useState(null);
     const [connected, setConnected] = useState(false);
@@ -12,49 +9,42 @@ const WebTerminal = () => {
     const [equityHistory, setEquityHistory] = useState([]);
     const [serverStatus, setServerStatus] = useState(null);
 
-    const testHttpConnection = async () => {
-        try {
-            const response = await fetch(`${BACKEND_HTTP_URL}/ping`);
-            const data = await response.json();
-            setServerStatus(data);
-            setEAConnected(data.eaConnected);
-        } catch (error) {
-            console.error('HTTP Test Failed:', error);
-            setError('Failed to connect to server');
-        }
-    };
-
     useEffect(() => {
-        testHttpConnection();
-        const httpInterval = setInterval(testHttpConnection, 30000);
-
+        let ws;
+        
         const connectWebSocket = () => {
             console.log('Attempting WebSocket connection...');
-            const ws = new WebSocket(BACKEND_WS_URL);
+            ws = new WebSocket('wss://g1-back.onrender.com');
             
             ws.onopen = () => {
+                console.log('WebSocket Connected');
                 setConnected(true);
                 setError(null);
-                console.log('WebSocket connected successfully');
             };
             
             ws.onclose = () => {
+                console.log('WebSocket Disconnected');
                 setConnected(false);
                 setEAConnected(false);
-                setError('WebSocket disconnected');
-                console.log('WebSocket disconnected, attempting to reconnect...');
-                setTimeout(connectWebSocket, 5000);
+                setTimeout(connectWebSocket, 5000); // Reconnect after 5 seconds
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket Error:', error);
+                setError('WebSocket connection error');
             };
             
             ws.onmessage = (event) => {
                 try {
+                    console.log('Received message:', event.data);
                     const data = JSON.parse(event.data);
-                    console.log('Received WebSocket data:', data);
                     
                     if (data.type === 'update' || data.type === 'status') {
+                        console.log('Processing update:', data);
                         setEAConnected(data.connected);
                         if (data.data) {
                             setAccountData(data.data);
+                            // Update equity history
                             if (data.data.equity) {
                                 setEquityHistory(prev => [...prev, {
                                     time: new Date().toLocaleTimeString(),
@@ -67,16 +57,35 @@ const WebTerminal = () => {
                     console.error('Error processing message:', error);
                 }
             };
-
-            return ws;
         };
 
-        const ws = connectWebSocket();
+        connectWebSocket();
 
+        // Cleanup on unmount
         return () => {
-            clearInterval(httpInterval);
-            if (ws) ws.close();
+            if (ws) {
+                ws.close();
+            }
         };
+    }, []);
+
+    // Regular polling for server status
+    useEffect(() => {
+        const fetchServerStatus = async () => {
+            try {
+                const response = await fetch('https://g1-back.onrender.com/ping');
+                const data = await response.json();
+                setServerStatus(data);
+                console.log('Server status:', data);
+            } catch (error) {
+                console.error('Error fetching server status:', error);
+            }
+        };
+
+        fetchServerStatus();
+        const interval = setInterval(fetchServerStatus, 30000);
+
+        return () => clearInterval(interval);
     }, []);
 
     return (
@@ -132,27 +141,18 @@ const WebTerminal = () => {
                 )}
             </div>
 
-            {/* Equity Chart */}
-            {eaConnected && equityHistory.length > 0 && (
-                <div className="bg-white shadow rounded-lg p-6">
-                    <h2 className="text-xl font-semibold mb-4">Equity History</h2>
-                    <div className="h-64">
-                        <LineChart width={800} height={200} data={equityHistory}>
-                            <XAxis dataKey="time" />
-                            <YAxis domain={['auto', 'auto']} />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="equity" stroke="#8884d8" />
-                        </LineChart>
-                    </div>
-                </div>
-            )}
-
-            {/* Error Display */}
-            {error && (
-                <div className="bg-red-50 p-4 rounded-md">
-                    <p className="text-red-700">{error}</p>
-                </div>
-            )}
+            {/* Debug Information */}
+            <div className="bg-gray-50 p-4 rounded-md">
+                <h3 className="text-sm font-medium text-gray-500">Debug Information</h3>
+                <pre className="mt-2 text-xs overflow-auto">
+                    {JSON.stringify({
+                        wsConnected: connected,
+                        eaConnected,
+                        serverStatus,
+                        accountData
+                    }, null, 2)}
+                </pre>
+            </div>
         </div>
     );
 };
