@@ -16,102 +16,127 @@ const clients = new Set();
 let lastEAUpdate = null;
 let eaConnected = false;
 
-// Clean JSON string
-function cleanJsonString(str) {
-    // Remove BOM and non-printable characters
-    let cleaned = str.replace(/^\uFEFF/, '');
-    cleaned = cleaned.replace(/[\u0000-\u001F]/g, '');
-    cleaned = cleaned.replace(/[\u007F-\u009F]/g, '');
-    cleaned = cleaned.replace(/\\/g, '\\\\');
-    cleaned = cleaned.trim();
-    return cleaned;
-}
+// Store trade commands
+const tradeCommands = new Map();
 
 // Middleware
 app.use(cors());
 app.use(morgan('dev'));
+app.use(express.json());
 
-// Custom middleware for MT4 updates
+// MT4 update endpoint
 app.post('/api/mt4/update', (req, res) => {
-    let data = '';
-    
-    req.on('data', chunk => {
-        data += chunk;
-    });
-    
-    req.on('end', () => {
-        try {
-            // Log raw data for debugging
-            console.log('Raw data received:', data);
-            
-            // Clean and parse the data
-            const cleanData = cleanJsonString(data);
-            console.log('Cleaned data:', cleanData);
-            
-            // Parse the JSON
-            const parsedData = JSON.parse(cleanData);
-            console.log('Parsed data:', parsedData);
-            
-            // Update state
-            lastEAUpdate = parsedData;
-            eaConnected = true;
-            
-            // Broadcast to WebSocket clients
-            broadcast({
-                type: 'update',
-                connected: true,
-                data: lastEAUpdate
-            });
-            
-            // Send success response
-            res.json({
-                success: true,
-                commands: []
-            });
-        } catch (error) {
-            console.error('Error processing data:', error);
-            console.log('Data that caused error:', data);
-            res.status(200).json({ 
-                success: false,
-                error: error.message,
-                commands: []
-            });
-        }
-    });
-    
-    req.on('error', (error) => {
-        console.error('Request error:', error);
+    try {
+        console.log('Received MT4 update:', req.body);
+        lastEAUpdate = req.body;
+        eaConnected = true;
+
+        // Send any pending commands
+        const pendingCommands = Array.from(tradeCommands.values())
+            .filter(cmd => cmd.status === 'pending');
+
+        // Broadcast to WebSocket clients
+        broadcast({
+            type: 'update',
+            connected: true,
+            data: lastEAUpdate
+        });
+
+        res.json({ 
+            success: true,
+            commands: pendingCommands
+        });
+    } catch (error) {
+        console.error('Error processing MT4 update:', error);
         res.status(200).json({ 
-            success: false,
+            success: false, 
             error: error.message,
             commands: []
         });
-    });
+    }
+});
+
+// Trade endpoints
+app.post('/api/trade', (req, res) => {
+    try {
+        const command = {
+            id: Date.now().toString(),
+            status: 'pending',
+            timestamp: new Date(),
+            ...req.body
+        };
+
+        console.log('Received trade command:', command);
+        tradeCommands.set(command.id, command);
+
+        // Clean up old commands
+        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+        for (const [id, cmd] of tradeCommands) {
+            if (cmd.timestamp < fiveMinutesAgo) {
+                tradeCommands.delete(id);
+            }
+        }
+
+        res.json({
+            success: true,
+            message: 'Trade command queued',
+            commandId: command.id
+        });
+    } catch (error) {
+        console.error('Trade error:', error);
+        res.status(200).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// Get pending trade commands
+app.get('/api/trade/pending', (req, res) => {
+    const pendingCommands = Array.from(tradeCommands.values())
+        .filter(cmd => cmd.status === 'pending');
+    res.json({ commands: pendingCommands });
+});
+
+// Update trade command status
+app.post('/api/trade/status', (req, res) => {
+    try {
+        const { commandId, status, result } = req.body;
+        
+        if (tradeCommands.has(commandId)) {
+            const command = tradeCommands.get(commandId);
+            command.status = status;
+            command.result = result;
+            tradeCommands.set(commandId, command);
+            
+            console.log('Updated command status:', command);
+        }
+        
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Status update error:', error);
+        res.status(200).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
 });
 
 // WebSocket connection handler
 wss.on('connection', (ws) => {
     console.log('New client connected');
     clients.add(ws);
-    
+
     // Send initial state
-    try {
-        ws.send(JSON.stringify({
-            type: 'status',
-            connected: eaConnected,
-            data: lastEAUpdate
-        }));
-    } catch (error) {
-        console.error('Error sending initial state:', error);
-    }
-    
+    ws.send(JSON.stringify({
+        type: 'status',
+        connected: eaConnected,
+        data: lastEAUpdate
+    }));
+
     ws.on('close', () => {
         console.log('Client disconnected');
         clients.delete(ws);
-    });
-    
-    ws.on('error', (error) => {
-        console.error('WebSocket error:', error);
     });
 });
 
@@ -129,11 +154,6 @@ function broadcast(data) {
     });
 }
 
-// Trade endpoints
-app.get('/api/trade/pending', (req, res) => {
-    res.json({ commands: [] });
-});
-
 // Test endpoint
 app.get('/ping', (req, res) => {
     res.json({
@@ -141,16 +161,6 @@ app.get('/ping', (req, res) => {
         timestamp: new Date().toISOString(),
         eaConnected,
         clientsCount: clients.size
-    });
-});
-
-// Error handler
-app.use((err, req, res, next) => {
-    console.error('Global error:', err);
-    res.status(200).json({ 
-        success: false,
-        error: err.message,
-        commands: []
     });
 });
 
