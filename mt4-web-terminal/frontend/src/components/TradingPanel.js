@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -6,22 +6,35 @@ import { Alert, AlertDescription } from './ui/alert';
 import { RefreshCw, X, Edit2, TrendingUp, TrendingDown } from 'lucide-react';
 
 const TradingPanel = ({ positions = [] }) => {
-    // State for new orders
     const [newOrder, setNewOrder] = useState({
-        symbol: 'EURUSD',
+        symbol: '',
         lots: 0.01,
         stopLoss: 0,
         takeProfit: 0,
     });
 
-    // State for modify order
+    const [symbolSuffixes, setSymbolSuffixes] = useState(['', 'm', '-mini']);
+    const [symbolInput, setSymbolInput] = useState('');
     const [modifyOrder, setModifyOrder] = useState(null);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
 
-    const symbols = ['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD'];
+    const commonSymbols = ['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD'];
 
-    // Execute new market order
+    const formatPrice = (price) => Number(price).toFixed(5);
+    const formatLots = (lots) => Number(lots).toFixed(2);
+
+    const handleSymbolSelect = (symbol) => {
+        setSymbolInput(symbol);
+        setNewOrder({ ...newOrder, symbol });
+    };
+
+    const handleSymbolInputChange = (e) => {
+        const value = e.target.value.toUpperCase();
+        setSymbolInput(value);
+        setNewOrder({ ...newOrder, symbol: value });
+    };
+
     const executeMarketOrder = async (type) => {
         try {
             const response = await fetch('https://g1-back.onrender.com/api/trade', {
@@ -36,9 +49,13 @@ const TradingPanel = ({ positions = [] }) => {
                 })
             });
 
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
             const data = await response.json();
             if (data.success) {
-                setSuccess(`Order executed successfully!`);
+                setSuccess('Order executed successfully!');
                 setError(null);
             } else {
                 setError(data.error || 'Failed to execute order');
@@ -48,8 +65,36 @@ const TradingPanel = ({ positions = [] }) => {
         }
     };
 
-    // Modify existing position
-    const modifyPosition = async (ticket) => {
+    const handleClosePosition = async (ticket) => {
+        try {
+            const response = await fetch('https://g1-back.onrender.com/api/trade', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'close',
+                    ticket
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            if (data.success) {
+                setSuccess('Position closed successfully!');
+                setError(null);
+            } else {
+                setError(data.error || 'Failed to close position');
+            }
+        } catch (error) {
+            setError('Network error: ' + error.message);
+        }
+    };
+
+    const handleModifyPosition = async (ticket, stopLoss, takeProfit) => {
         try {
             const response = await fetch('https://g1-back.onrender.com/api/trade', {
                 method: 'POST',
@@ -59,10 +104,14 @@ const TradingPanel = ({ positions = [] }) => {
                 body: JSON.stringify({
                     action: 'modify',
                     ticket,
-                    stopLoss: modifyOrder.stopLoss,
-                    takeProfit: modifyOrder.takeProfit
+                    stopLoss,
+                    takeProfit
                 })
             });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
 
             const data = await response.json();
             if (data.success) {
@@ -77,36 +126,7 @@ const TradingPanel = ({ positions = [] }) => {
         }
     };
 
-    // Close position
-    const closePosition = async (ticket, partial = false, lots = null) => {
-        try {
-            const response = await fetch('https://g1-back.onrender.com/api/trade', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    action: 'close',
-                    ticket,
-                    partial,
-                    lots
-                })
-            });
-
-            const data = await response.json();
-            if (data.success) {
-                setSuccess('Position closed successfully!');
-                setError(null);
-            } else {
-                setError(data.error || 'Failed to close position');
-            }
-        } catch (error) {
-            setError('Network error: ' + error.message);
-        }
-    };
-
-    // Close all positions
-    const closeAllPositions = async (symbol = null, type = null) => {
+    const handleCloseAll = async (type = null) => {
         try {
             const response = await fetch('https://g1-back.onrender.com/api/trade', {
                 method: 'POST',
@@ -115,14 +135,17 @@ const TradingPanel = ({ positions = [] }) => {
                 },
                 body: JSON.stringify({
                     action: 'closeAll',
-                    symbol,
                     type
                 })
             });
 
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
             const data = await response.json();
             if (data.success) {
-                setSuccess('All positions closed successfully!');
+                setSuccess('Positions closed successfully!');
                 setError(null);
             } else {
                 setError(data.error || 'Failed to close positions');
@@ -140,58 +163,82 @@ const TradingPanel = ({ positions = [] }) => {
                     <CardTitle>New Market Order</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-2 gap-4">
-                        <select
-                            className="p-2 border rounded"
-                            value={newOrder.symbol}
-                            onChange={(e) => setNewOrder({...newOrder, symbol: e.target.value})}
-                        >
-                            {symbols.map(sym => (
-                                <option key={sym} value={sym}>{sym}</option>
-                            ))}
-                        </select>
+                    <div className="space-y-4">
+                        {/* Symbol Input */}
+                        <div className="space-y-2">
+                            <div className="flex gap-2">
+                                <Input
+                                    value={symbolInput}
+                                    onChange={handleSymbolInputChange}
+                                    placeholder="Enter symbol"
+                                    className="flex-grow"
+                                />
+                                <select
+                                    className="p-2 border rounded"
+                                    onChange={(e) => handleSymbolSelect(symbolInput + e.target.value)}
+                                >
+                                    <option value="">No Suffix</option>
+                                    {symbolSuffixes.map(suffix => (
+                                        <option key={suffix} value={suffix}>{suffix || 'None'}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex gap-2 flex-wrap">
+                                {commonSymbols.map(symbol => (
+                                    <button
+                                        key={symbol}
+                                        onClick={() => handleSymbolSelect(symbol)}
+                                        className="px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+                                    >
+                                        {symbol}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
 
-                        <Input
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            value={newOrder.lots}
-                            onChange={(e) => setNewOrder({...newOrder, lots: parseFloat(e.target.value)})}
-                            placeholder="Lots"
-                        />
+                        {/* Order Details */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                value={newOrder.lots}
+                                onChange={(e) => setNewOrder({...newOrder, lots: parseFloat(e.target.value)})}
+                                placeholder="Lots"
+                            />
+                            <Input
+                                type="number"
+                                step="0.00001"
+                                value={newOrder.stopLoss}
+                                onChange={(e) => setNewOrder({...newOrder, stopLoss: parseFloat(e.target.value)})}
+                                placeholder="Stop Loss"
+                            />
+                            <Input
+                                type="number"
+                                step="0.00001"
+                                value={newOrder.takeProfit}
+                                onChange={(e) => setNewOrder({...newOrder, takeProfit: parseFloat(e.target.value)})}
+                                placeholder="Take Profit"
+                            />
+                        </div>
 
-                        <Input
-                            type="number"
-                            step="0.00001"
-                            value={newOrder.stopLoss}
-                            onChange={(e) => setNewOrder({...newOrder, stopLoss: parseFloat(e.target.value)})}
-                            placeholder="Stop Loss"
-                        />
-
-                        <Input
-                            type="number"
-                            step="0.00001"
-                            value={newOrder.takeProfit}
-                            onChange={(e) => setNewOrder({...newOrder, takeProfit: parseFloat(e.target.value)})}
-                            placeholder="Take Profit"
-                        />
-                    </div>
-
-                    <div className="flex gap-4 mt-4">
-                        <Button 
-                            className="flex-1 bg-green-600 hover:bg-green-700"
-                            onClick={() => executeMarketOrder(0)}
-                        >
-                            <TrendingUp className="w-4 h-4 mr-2" />
-                            Buy
-                        </Button>
-                        <Button 
-                            className="flex-1 bg-red-600 hover:bg-red-700"
-                            onClick={() => executeMarketOrder(1)}
-                        >
-                            <TrendingDown className="w-4 h-4 mr-2" />
-                            Sell
-                        </Button>
+                        {/* Buy/Sell Buttons */}
+                        <div className="flex gap-4">
+                            <Button 
+                                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                                onClick={() => executeMarketOrder(0)}
+                            >
+                                <TrendingUp className="w-4 h-4 mr-2" />
+                                Buy
+                            </Button>
+                            <Button 
+                                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                                onClick={() => executeMarketOrder(1)}
+                            >
+                                <TrendingDown className="w-4 h-4 mr-2" />
+                                Sell
+                            </Button>
+                        </div>
                     </div>
                 </CardContent>
             </Card>
@@ -203,53 +250,67 @@ const TradingPanel = ({ positions = [] }) => {
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
-                        <div className="flex gap-2">
-                            <Button onClick={() => closeAllPositions()}>
+                        {/* Close All Buttons */}
+                        <div className="flex gap-2 flex-wrap">
+                            <Button 
+                                variant="destructive" 
+                                onClick={() => handleCloseAll()}
+                            >
                                 Close All Positions
                             </Button>
-                            <Button onClick={() => closeAllPositions(null, 0)}>
+                            <Button 
+                                variant="outline" 
+                                onClick={() => handleCloseAll(0)}
+                            >
                                 Close All Buys
                             </Button>
-                            <Button onClick={() => closeAllPositions(null, 1)}>
+                            <Button 
+                                variant="outline" 
+                                onClick={() => handleCloseAll(1)}
+                            >
                                 Close All Sells
                             </Button>
                         </div>
 
+                        {/* Positions Table */}
                         <div className="overflow-x-auto">
-                            <table className="min-w-full">
-                                <thead>
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
                                     <tr>
-                                        <th className="px-4 py-2">Ticket</th>
-                                        <th className="px-4 py-2">Symbol</th>
-                                        <th className="px-4 py-2">Type</th>
-                                        <th className="px-4 py-2">Lots</th>
-                                        <th className="px-4 py-2">Open Price</th>
-                                        <th className="px-4 py-2">S/L</th>
-                                        <th className="px-4 py-2">T/P</th>
-                                        <th className="px-4 py-2">Profit</th>
-                                        <th className="px-4 py-2">Actions</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Symbol</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lots</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Open Price</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S/L</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">T/P</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Profit</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody className="bg-white divide-y divide-gray-200">
                                     {positions.map((position) => (
                                         <tr key={position.ticket}>
-                                            <td className="px-4 py-2">{position.ticket}</td>
-                                            <td className="px-4 py-2">{position.symbol}</td>
-                                            <td className="px-4 py-2">
+                                            <td className="px-6 py-4 whitespace-nowrap">{position.ticket}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap">{position.symbol}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
                                                 {position.type === 0 ? 
-                                                    <TrendingUp className="text-green-600" /> : 
-                                                    <TrendingDown className="text-red-600" />
+                                                    <span className="text-green-600">Buy</span> : 
+                                                    <span className="text-red-600">Sell</span>
                                                 }
                                             </td>
-                                            <td className="px-4 py-2">{position.lots}</td>
-                                            <td className="px-4 py-2">{position.openPrice}</td>
-                                            <td className="px-4 py-2">{position.stopLoss}</td>
-                                            <td className="px-4 py-2">{position.takeProfit}</td>
-                                            <td className="px-4 py-2">{position.profit}</td>
-                                            <td className="px-4 py-2">
+                                            <td className="px-6 py-4 whitespace-nowrap">{formatLots(position.lots)}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap">{formatPrice(position.openPrice)}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap">{formatPrice(position.stopLoss)}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap">{formatPrice(position.takeProfit)}</td>
+                                            <td className={`px-6 py-4 whitespace-nowrap ${position.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                {Number(position.profit).toFixed(2)}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex gap-2">
                                                     <Button
                                                         size="sm"
+                                                        variant="outline"
                                                         onClick={() => setModifyOrder(position)}
                                                     >
                                                         <Edit2 className="w-4 h-4" />
@@ -257,7 +318,7 @@ const TradingPanel = ({ positions = [] }) => {
                                                     <Button
                                                         size="sm"
                                                         variant="destructive"
-                                                        onClick={() => closePosition(position.ticket)}
+                                                        onClick={() => handleClosePosition(position.ticket)}
                                                     >
                                                         <X className="w-4 h-4" />
                                                     </Button>
@@ -302,28 +363,39 @@ const TradingPanel = ({ positions = [] }) => {
                                     placeholder="Take Profit"
                                 />
                                 <div className="flex gap-2">
-                                    <Button onClick={() => modifyPosition(modifyOrder.ticket)}>
+                                    <Button
+                                        className="flex-1"
+                                        onClick={() => handleModifyPosition(
+                                            modifyOrder.ticket,
+                                            modifyOrder.stopLoss,
+                                            modifyOrder.takeProfit
+                                        )}
+                                    >
                                         Save Changes
                                     </Button>
-                                    <Button variant="secondary" onClick={() => setModifyOrder(null)}>
+                                    <Button
+                                        className="flex-1"
+                                        variant="outline"
+                                        onClick={() => setModifyOrder(null)}
+                                    >
                                         Cancel
                                     </Button>
                                 </div>
                             </div>
                         </CardContent>
-                    </Card>
+                        </Card>
                 </div>
             )}
 
             {/* Error/Success Messages */}
             {error && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" className="mt-4">
                     <AlertDescription>{error}</AlertDescription>
                 </Alert>
             )}
             {success && (
-                <Alert className="bg-green-50 text-green-700">
-                    <AlertDescription>{success}</AlertDescription>
+                <Alert className="mt-4 bg-green-50 border-green-200">
+                    <AlertDescription className="text-green-800">{success}</AlertDescription>
                 </Alert>
             )}
         </div>
