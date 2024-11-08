@@ -1,31 +1,26 @@
 import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
-import { Server, Wallet, ArrowUpRight, ArrowDownRight, Users } from 'lucide-react';
+import { Server, Wallet, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
 const Dashboard = ({ accountData, equityHistory, positions = [] }) => {
-    // Helper function to format time
-    const formatTime = (dateString) => {
-        return new Date(dateString).toLocaleTimeString();
-    };
-
     return (
-        <div className="p-6 space-y-6 animate-blur-fade-in">
+        <div className="p-4 space-y-6 bg-black text-white">
             {/* Stats Cards */}
             <div className="grid grid-cols-4 gap-4">
                 {[
-                    { title: 'Balance', value: accountData?.balance || 0, icon: Wallet },
-                    { title: 'Equity', value: accountData?.equity || 0, icon: Wallet },
-                    { title: 'Margin', value: accountData?.margin || 0, icon: Wallet },
-                    { title: 'Free Margin', value: accountData?.freeMargin || 0, icon: Wallet }
+                    { title: 'Balance', value: accountData?.balance || 0 },
+                    { title: 'Equity', value: accountData?.equity || 0 },
+                    { title: 'Margin', value: accountData?.margin || 0 },
+                    { title: 'Free Margin', value: accountData?.freeMargin || 0 }
                 ].map((stat) => (
-                    <Card key={stat.title} className="glass-effect">
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
-                            <CardTitle className="text-sm text-gray-400">{stat.title}</CardTitle>
-                            <stat.icon className="w-4 h-4 text-gray-400" />
+                    <Card key={stat.title} className="bg-gray-900 rounded-lg p-3 border border-gray-800">
+                        <CardHeader className="flex justify-between items-center">
+                            <CardTitle className="text-xs text-gray-400">{stat.title}</CardTitle>
+                            <Wallet className="w-4 h-4 text-gray-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-white">
+                            <div className="text-xl font-bold">
                                 ${stat.value.toFixed(2)}
                             </div>
                         </CardContent>
@@ -35,7 +30,7 @@ const Dashboard = ({ accountData, equityHistory, positions = [] }) => {
 
             <div className="grid grid-cols-12 gap-4">
                 {/* Main Chart */}
-                <Card className="glass-effect col-span-8">
+                <Card className="bg-gray-900 rounded-lg col-span-8 p-4 border border-gray-800">
                     <CardHeader>
                         <CardTitle>Balance & Equity Overview</CardTitle>
                     </CardHeader>
@@ -45,12 +40,12 @@ const Dashboard = ({ accountData, equityHistory, positions = [] }) => {
                                 <AreaChart data={equityHistory}>
                                     <defs>
                                         <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
-                                            <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                                            <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
                                         </linearGradient>
                                         <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3}/>
-                                            <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
+                                            <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
                                     <XAxis dataKey="time" stroke="#374151" />
@@ -84,35 +79,35 @@ const Dashboard = ({ accountData, equityHistory, positions = [] }) => {
                 </Card>
 
                 {/* Account Info */}
-                <Card className="glass-effect col-span-4">
+                <Card className="bg-gray-900 rounded-lg col-span-4 p-4 border border-gray-800">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Server className="w-4 h-4" />
                             Account Information
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="flex flex-col space-y-1">
-                            <span className="text-sm text-gray-400">Account Number</span>
-                            <span className="text-lg font-medium">{accountData?.number || 'N/A'}</span>
+                    <CardContent className="space-y-2">
+                        <div>
+                            <div className="text-gray-400 text-xs">Account Number</div>
+                            <div className="text-lg">{accountData?.number || 'N/A'}</div>
                         </div>
-                        <div className="flex flex-col space-y-1">
-                            <span className="text-sm text-gray-400">Leverage</span>
-                            <span className="text-lg font-medium">{accountData?.leverage || 'N/A'}</span>
+                        <div>
+                            <div className="text-gray-400 text-xs">Leverage</div>
+                            <div className="text-lg">{accountData?.leverage || 'N/A'}</div>
                         </div>
-                        <div className="flex flex-col space-y-1">
-                            <span className="text-sm text-gray-400">Server</span>
-                            <span className="text-lg font-medium">{accountData?.server || 'N/A'}</span>
+                        <div>
+                            <div className="text-gray-400 text-xs">Server</div>
+                            <div className="text-lg">{accountData?.server || 'N/A'}</div>
                         </div>
-                        <div className="flex flex-col space-y-1">
-                            <span className="text-sm text-gray-400">Currency</span>
-                            <span className="text-lg font-medium">{accountData?.currency || 'USD'}</span>
+                        <div>
+                            <div className="text-gray-400 text-xs">Currency</div>
+                            <div className="text-lg">{accountData?.currency || 'USD'}</div>
                         </div>
                     </CardContent>
                 </Card>
 
                 {/* Recent Trades */}
-                <Card className="glass-effect col-span-12">
+                <Card className="bg-gray-900 rounded-lg col-span-12 p-4 border border-gray-800">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Users className="w-4 h-4" />
@@ -123,7 +118,7 @@ const Dashboard = ({ accountData, equityHistory, positions = [] }) => {
                         <div className="rounded-md">
                             <table className="w-full">
                                 <thead>
-                                    <tr className="text-left text-sm text-gray-400">
+                                    <tr className="text-left text-xs text-gray-400">
                                         <th className="p-2">Ticket</th>
                                         <th className="p-2">Symbol</th>
                                         <th className="p-2">Type</th>
@@ -136,17 +131,11 @@ const Dashboard = ({ accountData, equityHistory, positions = [] }) => {
                                 </thead>
                                 <tbody>
                                     {positions.slice(0, 5).map((trade) => (
-                                        <tr key={trade.ticket} className="border-t border-white/5">
+                                        <tr key={trade.ticket} className="border-t border-gray-800">
                                             <td className="p-2">{trade.ticket}</td>
-                                            <td className="p-2 font-medium">{trade.symbol}</td>
-                                            <td className="p-2">
-                                                <div className={`flex items-center gap-1 ${trade.type === 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                    {trade.type === 0 ? 
-                                                        <ArrowUpRight className="w-4 h-4" /> : 
-                                                        <ArrowDownRight className="w-4 h-4" />
-                                                    }
-                                                    {trade.type === 0 ? 'Buy' : 'Sell'}
-                                                </div>
+                                            <td className="p-2">{trade.symbol}</td>
+                                            <td className={`p-2 ${trade.type === 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                {trade.type === 0 ? 'Buy' : 'Sell'}
                                             </td>
                                             <td className="p-2">{trade.lots}</td>
                                             <td className="p-2">{trade.openPrice}</td>
