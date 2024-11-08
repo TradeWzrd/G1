@@ -18,7 +18,9 @@ app.use(morgan('dev'));
 const clients = new Set();
 let lastUpdate = null;
 let eaConnected = false;
-const pendingCommands = [];
+
+// Store pending commands
+let pendingCommands = [];
 
 // Function to parse incoming data
 function parseData(dataString) {
@@ -73,29 +75,45 @@ function parseData(dataString) {
 }
 
 // MT4 update endpoint
-app.post('/api/mt4/update', (req, res) => {
+app.post('/api/mt4/update', express.text(), (req, res) => {
     try {
-        console.log('Received raw data:', req.body);
+        console.log('Received MT4 update:', req.body);
         const data = parseData(req.body);
         
         if (data) {
             lastUpdate = data;
             eaConnected = true;
 
-            // Broadcast to clients
+            // Get any pending commands and send them to EA
+            const commands = pendingCommands;
+            pendingCommands = []; // Clear the queue
+
+            // Broadcast update to clients
             broadcast({
                 type: 'update',
                 connected: true,
                 data: data
             });
 
-            res.json({ success: true });
+            // Send response with pending commands
+            res.json({ 
+                success: true,
+                commands: commands 
+            });
         } else {
-            res.json({ success: false, error: 'Invalid data format' });
+            res.json({ 
+                success: false, 
+                error: 'Invalid data format',
+                commands: []
+            });
         }
     } catch (error) {
         console.error('Error processing update:', error);
-        res.json({ success: false, error: error.message });
+        res.json({ 
+            success: false, 
+            error: error.message,
+            commands: []
+        });
     }
 });
 
