@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, XAxis, YAxis, Tooltip, Line, ResponsiveContainer } from 'recharts';
-import { TrendingUp, TrendingDown, X, Edit2, RefreshCw, Activity, DollarSign, Wallet } from 'lucide-react';
+import { TrendingUp, TrendingDown, X, DollarSign, Wallet, Activity } from 'lucide-react';
 
 const WebTerminal = () => {
     const [accountData, setAccountData] = useState(null);
@@ -181,111 +181,96 @@ const WebTerminal = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-black to-gray-900 text-white p-6">
-            {/* Glassmorphism Card for Status */}
-            <div className="backdrop-blur-md bg-white/10 rounded-2xl p-6 mb-8">
+        <div className="w-full max-w-[1920px] mx-auto min-h-screen bg-[#0A0A0A] p-4 md:p-6">
+            {/* Header - More Compact */}
+            <div className="backdrop-blur-md bg-white/5 rounded-xl p-4 mb-4">
                 <div className="flex justify-between items-center">
                     <div>
-                        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
+                        <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
                             Trading Terminal
                         </h1>
-                        <p className="text-gray-400 mt-1">Real-time market execution</p>
+                        <p className="text-sm text-gray-400">Real-time market execution</p>
                     </div>
-                    <div className="flex gap-4">
-                        <div className={`px-4 py-2 rounded-full flex items-center gap-2 ${connected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                            <Activity className="w-4 h-4" />
+                    <div className="flex gap-2">
+                        <div className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${connected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                            <Activity className="w-3 h-3" />
                             {connected ? 'Connected' : 'Disconnected'}
                         </div>
-                        <div className={`px-4 py-2 rounded-full flex items-center gap-2 ${eaConnected ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                            <RefreshCw className="w-4 h-4" />
+                        <div className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${eaConnected ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                            <Activity className="w-3 h-3" />
                             {eaConnected ? 'EA Active' : 'EA Inactive'}
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 backdrop-blur-lg border border-white/10">
-                    <div className="flex flex-col p-6">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <p className="text-sm text-gray-400">Balance</p>
-                                <p className="text-2xl font-bold mt-1">
-                                    ${(accountData?.balance || 0).toFixed(2)}
-                                </p>
-                            </div>
-                            <div className="p-2 bg-blue-500/20 rounded-lg">
-                                <DollarSign className="w-6 h-6 text-blue-400" />
-                            </div>
+            {/* Stats Grid - More Compact */}
+            <div className="grid grid-cols-3 gap-4 mb-4">
+                {/* Balance Card */}
+                <div className="bg-[#0D1117] rounded-xl p-4 border border-white/5">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-xs text-gray-400">Balance</p>
+                            <p className="text-xl font-bold mt-1">
+                                ${(accountData?.balance || 0).toFixed(2)}
+                            </p>
                         </div>
-                        <div className="mt-4">
-                            <div className="text-sm text-blue-400">
-                                +${((accountData?.equity || 0) - (accountData?.balance || 0)).toFixed(2)}
-                            </div>
+                        <div className="p-2 bg-blue-500/10 rounded-lg">
+                            <DollarSign className="w-4 h-4 text-blue-400" />
                         </div>
+                    </div>
+                    <div className="mt-2 text-xs text-blue-400">
+                        +${((accountData?.equity || 0) - (accountData?.balance || 0)).toFixed(2)}
                     </div>
                 </div>
 
-                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-lg border border-white/10">
-                    <div className="flex flex-col p-6">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <p className="text-sm text-gray-400">Equity</p>
-                                <p className="text-2xl font-bold mt-1">
-                                    ${(accountData?.equity || 0).toFixed(2)}
-                                </p>
-                            </div>
-                            <div className="p-2 bg-purple-500/20 rounded-lg">
-                                <Wallet className="w-6 h-6 text-purple-400" />
-                            </div>
+                {/* Equity Card */}
+                <div className="bg-[#0D1117] rounded-xl p-4 border border-white/5">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-xs text-gray-400">Equity</p>
+                            <p className="text-xl font-bold mt-1">
+                                ${(accountData?.equity || 0).toFixed(2)}
+                            </p>
                         </div>
-                        <div className="h-16 mt-4">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={equityHistory}>
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="equity" 
-                                        stroke="rgba(168, 85, 247, 0.5)" 
-                                        strokeWidth={2}
-                                        dot={false}
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
+                        <div className="p-2 bg-purple-500/10 rounded-lg">
+                            <Wallet className="w-4 h-4 text-purple-400" />
                         </div>
+                    </div>
+                    <div className="h-12 mt-2">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={equityHistory}>
+                                <Line type="monotone" dataKey="equity" stroke="#a855f7" strokeWidth={1.5} dot={false} />
+                            </LineChart>
+                        </ResponsiveContainer>
                     </div>
                 </div>
 
-                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-pink-500/10 to-red-500/10 backdrop-blur-lg border border-white/10">
-                    <div className="flex flex-col p-6">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <p className="text-sm text-gray-400">Free Margin</p>
-                                <p className="text-2xl font-bold mt-1">
-                                    ${(accountData?.freeMargin || 0).toFixed(2)}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="mt-4">
-                            <div className="text-sm text-gray-400">
-                                Used: ${(accountData?.margin || 0).toFixed(2)}
-                            </div>
-                        </div>
+                {/* Free Margin Card */}
+                <div className="bg-[#0D1117] rounded-xl p-4 border border-white/5">
+                    <div>
+                        <p className="text-xs text-gray-400">Free Margin</p>
+                        <p className="text-xl font-bold mt-1">
+                            ${(accountData?.freeMargin || 0).toFixed(2)}
+                        </p>
+                    </div>
+                    <div className="mt-2 text-xs text-gray-400">
+                        Used: ${(accountData?.margin || 0).toFixed(2)}
                     </div>
                 </div>
             </div>
 
             {/* Trading Interface */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* New Order Card */}
-                <div className="backdrop-blur-md bg-white/5 rounded-2xl border border-white/10 p-6">
-                    <h3 className="text-xl font-bold mb-6">New Order</h3>
-                    <div className="space-y-4">
+            <div className="grid grid-cols-[350px,1fr] gap-4">
+                {/* New Order Panel */}
+                <div className="bg-[#0D1117] rounded-xl p-4 border border-white/5">
+                    <h3 className="text-base font-bold mb-3">New Order</h3>
+                    <div className="space-y-3">
                         <input
                             type="text"
                             value={newOrder.symbol}
                             onChange={(e) => setNewOrder({...newOrder, symbol: e.target.value})}
-                            className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                            className="w-full h-9 bg-black/20 border border-white/5 rounded-lg px-3 text-sm text-white"
                             placeholder="Symbol"
                         />
                         <input
@@ -293,96 +278,88 @@ const WebTerminal = () => {
                             step="0.01"
                             value={newOrder.lots}
                             onChange={(e) => setNewOrder({...newOrder, lots: parseFloat(e.target.value)})}
-                            className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                            className="w-full h-9 bg-black/20 border border-white/5 rounded-lg px-3 text-sm text-white"
                             placeholder="Lots"
                         />
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-3">
                             <input
                                 type="number"
-                                step="0.00001"
                                 value={newOrder.stopLoss}
                                 onChange={(e) => setNewOrder({...newOrder, stopLoss: parseFloat(e.target.value)})}
-                                className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                className="w-full h-9 bg-black/20 border border-white/5 rounded-lg px-3 text-sm text-white"
                                 placeholder="Stop Loss"
                             />
                             <input
                                 type="number"
-                                step="0.00001"
                                 value={newOrder.takeProfit}
                                 onChange={(e) => setNewOrder({...newOrder, takeProfit: parseFloat(e.target.value)})}
-                                className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                className="w-full h-9 bg-black/20 border border-white/5 rounded-lg px-3 text-sm text-white"
                                 placeholder="Take Profit"
                             />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-3">
                             <button
                                 onClick={() => executeTrade(0)}
-                                className="group relative w-full"
+                                className="h-9 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg text-sm font-medium flex items-center justify-center gap-1"
                             >
-                                <div className="absolute -inset-0.5 bg-gradient-to-r from-green-500 to-teal-500 rounded-lg blur opacity-30 group-hover:opacity-100 transition duration-1000"></div>
-                                <div className="relative w-full bg-black/50 rounded-lg px-6 py-3 flex items-center justify-center gap-2">
-                                    <TrendingUp className="w-5 h-5" />
-                                    Buy
-                                </div>
+                                <TrendingUp className="w-4 h-4" />
+                                Buy
                             </button>
                             <button
                                 onClick={() => executeTrade(1)}
-                                className="group relative w-full"
+                                className="h-9 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm font-medium flex items-center justify-center gap-1"
                             >
-                                <div className="absolute -inset-0.5 bg-gradient-to-r from-red-500 to-pink-500 rounded-lg blur opacity-30 group-hover:opacity-100 transition duration-1000"></div>
-                                <div className="relative w-full bg-black/50 rounded-lg px-6 py-3 flex items-center justify-center gap-2">
-                                    <TrendingDown className="w-5 h-5" />
-                                    Sell
-                                </div>
+                                <TrendingDown className="w-4 h-4" />
+                                Sell
                             </button>
                         </div>
                     </div>
                 </div>
 
                 {/* Positions Table */}
-                <div className="lg:col-span-2 backdrop-blur-md bg-white/5 rounded-2xl border border-white/10 p-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-xl font-bold">Open Positions</h3>
+                <div className="bg-[#0D1117] rounded-xl p-4 border border-white/5">
+                    <div className="flex justify-between items-center mb-3">
+                        <h3 className="text-base font-bold">Open Positions</h3>
                         <button 
                             onClick={() => handleCloseAll()}
-                            className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
+                            className="px-3 h-7 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm"
                         >
                             Close All
                         </button>
                     </div>
                     <div className="overflow-x-auto">
-                        <table className="w-full min-w-[600px]">
+                        <table className="w-full">
                             <thead>
-                                <tr className="text-gray-400 border-b border-white/10">
-                                    <th className="text-left py-3 px-4">Symbol</th>
-                                    <th className="text-left py-3 px-4">Type</th>
-                                    <th className="text-right py-3 px-4">Lots</th>
-                                    <th className="text-right py-3 px-4">Open Price</th>
-                                    <th className="text-right py-3 px-4">Profit</th>
-                                    <th className="text-right py-3 px-4">Actions</th>
+                                <tr className="text-xs text-gray-400">
+                                    <th className="text-left py-2 font-medium">Symbol</th>
+                                    <th className="text-left py-2 font-medium">Type</th>
+                                    <th className="text-right py-2 font-medium">Lots</th>
+                                    <th className="text-right py-2 font-medium">Open Price</th>
+                                    <th className="text-right py-2 font-medium">Profit</th>
+                                    <th className="text-right py-2 font-medium">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {positions && positions.map((position) => (
-                                    <tr key={position.ticket} className="border-b border-white/5">
-                                        <td className="py-3 px-4">{position.symbol}</td>
+                                    <tr key={position.ticket} className="border-t border-white/5">
+                                        <td className="py-2 text-sm">{position.symbol}</td>
                                         <td className={position.type === 0 ? 'text-green-400' : 'text-red-400'}>
-                                            <div className="flex items-center gap-1">
-                                                {position.type === 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                                            <div className="flex items-center gap-1 text-sm">
+                                                {position.type === 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                                                 {position.type === 0 ? 'Buy' : 'Sell'}
                                             </div>
                                         </td>
-                                        <td className="text-right py-3 px-4">{position.lots?.toFixed(2) || '0.00'}</td>
-                                        <td className="text-right py-3 px-4">{position.openPrice?.toFixed(5) || '0.00000'}</td>
-                                        <td className={`text-right py-3 px-4 ${position.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        <td className="text-right text-sm">{position.lots?.toFixed(2) || '0.00'}</td>
+                                        <td className="text-right text-sm">{position.openPrice?.toFixed(5) || '0.00000'}</td>
+                                        <td className={`text-right text-sm ${position.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                             ${position.profit?.toFixed(2) || '0.00'}
                                         </td>
-                                        <td className="text-right py-3 px-4">
+                                        <td className="text-right">
                                             <button
                                                 onClick={() => handleClosePosition(position.ticket)}
-                                                className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
+                                                className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg"
                                             >
-                                                <X className="w-4 h-4" />
+                                                <X className="w-3 h-3" />
                                             </button>
                                         </td>
                                     </tr>
@@ -395,12 +372,12 @@ const WebTerminal = () => {
 
             {/* Status Messages */}
             {error && (
-                <div className="fixed bottom-6 right-6 max-w-md p-4 bg-red-500/20 text-red-400 rounded-lg border border-red-500/20 backdrop-blur-md">
+                <div className="fixed bottom-4 right-4 max-w-md p-3 bg-red-500/10 text-red-400 rounded-lg border border-red-500/10 text-sm">
                     {error}
                 </div>
             )}
             {success && (
-                <div className="fixed bottom-6 right-6 max-w-md p-4 bg-green-500/20 text-green-400 rounded-lg border border-green-500/20 backdrop-blur-md">
+                <div className="fixed bottom-4 right-4 max-w-md p-3 bg-green-500/10 text-green-400 rounded-lg border border-green-500/10 text-sm">
                     {success}
                 </div>
             )}
