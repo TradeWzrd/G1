@@ -13,7 +13,7 @@ import {
 
 const Dashboard = ({ accountData, equityHistory }) => {
     return (
-        <div className="p-4 space-y-6 bg-black text-white">
+        <div className="p-6 space-y-6 bg-[#0a0f1a] text-white">
             {/* Stats Cards */}
             <div className="grid grid-cols-4 gap-4">
                 {[
@@ -22,7 +22,7 @@ const Dashboard = ({ accountData, equityHistory }) => {
                     { title: 'Margin', value: accountData?.margin || 0, Icon: Activity },
                     { title: 'Free Margin', value: accountData?.freeMargin || 0, Icon: LineChart }
                 ].map((stat) => (
-                    <div key={stat.title} className="bg-gray-900 rounded-lg p-3 border border-gray-800">
+                    <div key={stat.title} className="bg-[#111827] rounded-lg p-4 border border-[#1f2937]">
                         <div className="flex justify-between items-start">
                             <div className="text-gray-400 text-xs">{stat.title}</div>
                             <stat.Icon className="w-4 h-4 text-gray-400" />
@@ -34,7 +34,7 @@ const Dashboard = ({ accountData, equityHistory }) => {
 
             <div className="grid grid-cols-12 gap-4">
                 {/* Balance & Equity Chart */}
-                <div className="col-span-8 bg-gray-900 rounded-lg p-4 border border-gray-800">
+                <div className="col-span-8 bg-[#111827] rounded-lg p-4 border border-[#1f2937]">
                     <h2 className="text-lg font-bold mb-4">Balance & Equity Overview</h2>
                     <div className="h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -76,7 +76,7 @@ const Dashboard = ({ accountData, equityHistory }) => {
                 </div>
 
                 {/* Account Information */}
-                <div className="col-span-4 bg-gray-900 rounded-lg p-4 border border-gray-800">
+                <div className="col-span-4 bg-[#111827] rounded-lg p-4 border border-[#1f2937]">
                     <div className="flex items-center gap-2 mb-4">
                         <Server className="w-5 h-5 text-gray-400" />
                         <h2 className="text-lg font-bold">Account Information</h2>
@@ -95,44 +95,44 @@ const Dashboard = ({ accountData, equityHistory }) => {
                         ))}
                     </div>
                 </div>
+            </div>
 
-                {/* Recent Trades */}
-                <div className="col-span-12 bg-gray-900 rounded-lg p-4 border border-gray-800">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Users className="w-5 h-5 text-gray-400" />
-                        <h2 className="text-lg font-bold">Recent Trades</h2>
-                    </div>
-                    <table className="w-full">
-                        <thead>
-                            <tr className="text-gray-400 text-sm">
-                                <th className="text-left p-2">Ticket</th>
-                                <th className="text-left p-2">Symbol</th>
-                                <th className="text-left p-2">Type</th>
-                                <th className="text-left p-2">Lots</th>
-                                <th className="text-right p-2">Open Price</th>
-                                <th className="text-right p-2">SL/TP</th>
-                                <th className="text-right p-2">Profit</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {accountData?.positions?.map((trade) => (
-                                <tr key={trade.ticket} className="border-t border-gray-800">
-                                    <td className="p-2">{trade.ticket}</td>
-                                    <td className="p-2">{trade.symbol}</td>
-                                    <td className={`p-2 ${trade.type === 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                        {trade.type === 0 ? 'Buy' : 'Sell'}
-                                    </td>
-                                    <td className="p-2">{trade.lots}</td>
-                                    <td className="p-2 text-right">{trade.openPrice}</td>
-                                    <td className="p-2 text-right">{trade.stopLoss}/{trade.takeProfit}</td>
-                                    <td className={`p-2 text-right ${trade.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                        ${trade.profit.toFixed(2)}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            {/* Recent Trades */}
+            <div className="col-span-12 bg-[#111827] rounded-lg p-4 border border-[#1f2937]">
+                <div className="flex items-center gap-2 mb-4">
+                    <Users className="w-5 h-5 text-gray-400" />
+                    <h2 className="text-lg font-bold">Recent Trades</h2>
                 </div>
+                <table className="w-full">
+                    <thead>
+                        <tr className="text-gray-400 text-sm">
+                            <th className="text-left p-2">Ticket</th>
+                            <th className="text-left p-2">Symbol</th>
+                            <th className="text-left p-2">Type</th>
+                            <th className="text-left p-2">Lots</th>
+                            <th className="text-right p-2">Open Price</th>
+                            <th className="text-right p-2">SL/TP</th>
+                            <th className="text-right p-2">Profit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {accountData?.positions?.map((trade) => (
+                            <tr key={trade.ticket} className="border-t border-[#1f2937]">
+                                <td className="p-2">{trade.ticket}</td>
+                                <td className="p-2">{trade.symbol}</td>
+                                <td className={`p-2 ${trade.type === 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {trade.type === 0 ? 'Buy' : 'Sell'}
+                                </td>
+                                <td className="p-2">{trade.lots}</td>
+                                <td className="p-2 text-right">{trade.openPrice}</td>
+                                <td className="p-2 text-right">{trade.stopLoss}/{trade.takeProfit}</td>
+                                <td className={`p-2 text-right ${trade.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    ${trade.profit.toFixed(2)}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
         </div>
     );

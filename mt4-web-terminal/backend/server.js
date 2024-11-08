@@ -13,11 +13,13 @@ app.use(express.text());
 app.use(cors());
 app.use(morgan('dev'));
 
-// Store connected clients
+// Store connected clients and pending commands
 const clients = new Set();
 let lastUpdate = null;
 let eaConnected = false;
+const pendingCommands = [];
 
+// Function to parse incoming data
 function parseData(dataString) {
     try {
         if (typeof dataString !== 'string') {
@@ -94,6 +96,33 @@ app.post('/api/mt4/update', (req, res) => {
         console.error('Error processing update:', error);
         res.json({ success: false, error: error.message });
     }
+});
+
+// Trade routes
+app.post('/api/trade', (req, res) => {
+    try {
+        console.log('Received trade command:', req.body);
+        const command = req.body;
+        
+        // Add command to pending commands queue
+        pendingCommands.push(command);
+        
+        res.json({
+            success: true,
+            message: 'Trade command queued',
+            command: command
+        });
+    } catch (error) {
+        console.error('Trade error:', error);
+        res.status(200).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+app.get('/api/trade/pending', (req, res) => {
+    res.json({ commands: pendingCommands });
 });
 
 // Broadcast function
