@@ -11,6 +11,13 @@ const WebTerminal = () => {
     const [eaConnected, setEAConnected] = useState(false);
     const [error, setError] = useState(null);
     const [equityHistory, setEquityHistory] = useState([]);
+    const [success, setSuccess] = useState(null);
+    const [newOrder, setNewOrder] = useState({
+        symbol: 'XAUUSDm',
+        lots: 0.01,
+        stopLoss: 0,
+        takeProfit: 0
+    });
 
     useEffect(() => {
         const ws = new WebSocket('wss://g1-back.onrender.com');
@@ -72,15 +79,85 @@ const WebTerminal = () => {
     };
 
     const executeTrade = async (type) => {
-        // ... existing code for executing trade ...
+        try {
+            const response = await fetch('https://g1-back.onrender.com/api/trade', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'open',
+                    type,
+                    symbol: newOrder.symbol,
+                    lots: newOrder.lots,
+                    stopLoss: newOrder.stopLoss,
+                    takeProfit: newOrder.takeProfit
+                })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                setSuccess('Order executed successfully!');
+                setError(null);
+                setTimeout(() => setSuccess(null), 3000); // Clear success message after 3 seconds
+            } else {
+                setError(data.error || 'Failed to execute order');
+            }
+        } catch (error) {
+            setError('Network error: ' + error.message);
+        }
     };
 
     const handleClosePosition = async (ticket) => {
-        // ... existing code for closing position ...
+        try {
+            const response = await fetch('https://g1-back.onrender.com/api/trade', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'close',
+                    ticket
+                })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                setSuccess('Position closed successfully!');
+                setError(null);
+                setTimeout(() => setSuccess(null), 3000); // Clear success message after 3 seconds
+            } else {
+                setError(data.error || 'Failed to close position');
+            }
+        } catch (error) {
+            setError('Network error: ' + error.message);
+        }
     };
 
     const handleCloseAll = async (type) => {
-        // ... existing code for closing all positions ...
+        try {
+            const response = await fetch('https://g1-back.onrender.com/api/trade', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'closeAll',
+                    type
+                })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                setSuccess('All positions closed successfully!');
+                setError(null);
+                setTimeout(() => setSuccess(null), 3000); // Clear success message after 3 seconds
+            } else {
+                setError(data.error || 'Failed to close positions');
+            }
+        } catch (error) {
+            setError('Network error: ' + error.message);
+        }
     };
 
     return (
