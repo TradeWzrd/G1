@@ -123,23 +123,58 @@ app.post('/api/trade', (req, res) => {
         const command = req.body;
         console.log('Received trade command:', command);
 
-        // Validate required trade parameters
-        if (!command.action || !command.symbol || command.type === undefined || !command.lots) {
+        // Different validation for different actions
+        if (command.action === 'closeAll') {
+            const formattedCommand = 'CLOSEALL';
+            console.log('Formatted close all command:', formattedCommand);
+            pendingCommands.push(formattedCommand);
+            
             return res.json({
-                success: false,
-                error: 'Missing required trade parameters'
+                success: true,
+                message: 'Close all command queued'
+            });
+        } 
+        else if (command.action === 'open') {
+            // Validate open trade parameters
+            if (!command.symbol || command.type === undefined || !command.lots) {
+                return res.json({
+                    success: false,
+                    error: 'Missing required trade parameters'
+                });
+            }
+
+            const formattedCommand = `${command.type === 0 ? 'BUY' : 'SELL'},${command.symbol},${command.lots},${command.stopLoss || 0},${command.takeProfit || 0}`;
+            console.log('Formatted open command:', formattedCommand);
+            pendingCommands.push(formattedCommand);
+
+            return res.json({
+                success: true,
+                message: 'Trade command queued'
             });
         }
+        else if (command.action === 'close') {
+            if (!command.ticket) {
+                return res.json({
+                    success: false,
+                    error: 'Missing ticket number'
+                });
+            }
 
-        // Format command for EA
-        const formattedCommand = formatTradeCommand(command);
-        pendingCommands.push(formattedCommand);
+            const formattedCommand = `CLOSE,${command.ticket}`;
+            console.log('Formatted close command:', formattedCommand);
+            pendingCommands.push(formattedCommand);
 
-        console.log('Formatted command:', formattedCommand);
-        res.json({
-            success: true,
-            message: 'Trade command queued'
-        });
+            return res.json({
+                success: true,
+                message: 'Close command queued'
+            });
+        }
+        else {
+            return res.json({
+                success: false,
+                error: 'Invalid action'
+            });
+        }
     } catch (error) {
         console.error('Trade error:', error);
         res.json({
@@ -148,20 +183,6 @@ app.post('/api/trade', (req, res) => {
         });
     }
 });
-
-// Function to format trade commands
-function formatTradeCommand(command) {
-    switch(command.action) {
-        case 'open':
-            return `${command.type === 0 ? 'BUY' : 'SELL'},${command.symbol},${command.lots},${command.stopLoss || 0},${command.takeProfit || 0}`;
-        case 'close':
-            return `CLOSE,${command.ticket}`;
-        case 'modify':
-            return `MODIFY,${command.ticket},${command.stopLoss || 0},${command.takeProfit || 0}`;
-        default:
-            throw new Error('Invalid action');
-    }
-}
 
 // Get pending commands
 app.get('/api/trade/pending', (req, res) => {

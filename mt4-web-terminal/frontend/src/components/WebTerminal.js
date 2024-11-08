@@ -162,7 +162,7 @@ const WebTerminal = () => {
         }
     };
 
-    const handleCloseAll = async (type) => {
+    const handleCloseAll = async () => {
         try {
             const response = await fetch('https://g1-back.onrender.com/api/trade', {
                 method: 'POST',
@@ -170,20 +170,19 @@ const WebTerminal = () => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    action: 'closeAll',
-                    type
+                    action: 'closeAll'
                 })
             });
 
             const data = await response.json();
             if (data.success) {
-                setSuccess('All positions closed successfully!');
+                setSuccess('Close all command sent successfully!');
                 setError(null);
-                setTimeout(() => setSuccess(null), 3000); // Clear success message after 3 seconds
             } else {
                 setError(data.error || 'Failed to close positions');
             }
         } catch (error) {
+            console.error('Close all error:', error);
             setError('Network error: ' + error.message);
         }
     };
