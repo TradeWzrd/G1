@@ -10,6 +10,7 @@ const wss = new WebSocket.Server({ server });
 
 // Use text parser instead of JSON parser for MT4 updates
 app.use(express.text());
+app.use(express.json());
 app.use(cors());
 app.use(morgan('dev'));
 
@@ -98,29 +99,53 @@ app.post('/api/mt4/update', (req, res) => {
     }
 });
 
-// Trade routes
+// Trade command handler
 app.post('/api/trade', (req, res) => {
     try {
-        console.log('Received trade command:', req.body);
         const command = req.body;
-        
-        // Add command to pending commands queue
-        pendingCommands.push(command);
-        
+        console.log('Received trade command:', command);
+
+        // Validate required trade parameters
+        if (!command.action || !command.symbol || command.type === undefined || !command.lots) {
+            return res.json({
+                success: false,
+                error: 'Missing required trade parameters'
+            });
+        }
+
+        // Format command for EA
+        const formattedCommand = formatTradeCommand(command);
+        pendingCommands.push(formattedCommand);
+
+        console.log('Formatted command:', formattedCommand);
         res.json({
             success: true,
-            message: 'Trade command queued',
-            command: command
+            message: 'Trade command queued'
         });
     } catch (error) {
         console.error('Trade error:', error);
-        res.status(200).json({ 
-            success: false, 
-            error: error.message 
+        res.json({
+            success: false,
+            error: error.message
         });
     }
 });
 
+// Function to format trade commands
+function formatTradeCommand(command) {
+    switch(command.action) {
+        case 'open':
+            return `${command.type === 0 ? 'BUY' : 'SELL'},${command.symbol},${command.lots},${command.stopLoss || 0},${command.takeProfit || 0}`;
+        case 'close':
+            return `CLOSE,${command.ticket}`;
+        case 'modify':
+            return `MODIFY,${command.ticket},${command.stopLoss || 0},${command.takeProfit || 0}`;
+        default:
+            throw new Error('Invalid action');
+    }
+}
+
+// Get pending commands
 app.get('/api/trade/pending', (req, res) => {
     res.json({ commands: pendingCommands });
 });

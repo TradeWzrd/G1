@@ -100,6 +100,7 @@ const WebTerminal = () => {
 
     const executeTrade = async (type) => {
         try {
+            console.log('Executing trade:', { type, ...newOrder });
             const response = await fetch('https://g1-back.onrender.com/api/trade', {
                 method: 'POST',
                 headers: {
@@ -107,24 +108,31 @@ const WebTerminal = () => {
                 },
                 body: JSON.stringify({
                     action: 'open',
-                    type,
                     symbol: newOrder.symbol,
-                    lots: newOrder.lots,
-                    stopLoss: newOrder.stopLoss,
-                    takeProfit: newOrder.takeProfit
+                    type: type, // 0 for BUY, 1 for SELL
+                    lots: parseFloat(newOrder.lots),
+                    stopLoss: parseFloat(newOrder.stopLoss || 0),
+                    takeProfit: parseFloat(newOrder.takeProfit || 0)
                 })
             });
 
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
             const data = await response.json();
+            console.log('Trade response:', data);
+            
             if (data.success) {
                 setSuccess('Order executed successfully!');
                 setError(null);
                 setTimeout(() => setSuccess(null), 3000); // Clear success message after 3 seconds
             } else {
-                setError(data.message || 'Error executing order');
+                setError(data.error || 'Failed to execute order');
             }
         } catch (error) {
-            setError('Network error');
+            console.error('Trade error:', error);
+            setError('Network error: ' + error.message);
         }
     };
 

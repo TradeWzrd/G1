@@ -12,15 +12,21 @@ import {
 } from 'lucide-react';
 
 const Dashboard = ({ accountData, equityHistory }) => {
+    // Helper function to safely get numeric values
+    const getStatValue = (value) => {
+        const numValue = parseFloat(value);
+        return isNaN(numValue) ? 0 : numValue;
+    };
+
     return (
         <div className="p-6 space-y-6 bg-[#0a0f1a] text-white">
             {/* Stats Cards */}
             <div className="grid grid-cols-4 gap-4">
                 {[
-                    { title: 'Balance', value: accountData?.balance || 0, Icon: Wallet },
-                    { title: 'Equity', value: accountData?.equity || 0, Icon: CreditCard },
-                    { title: 'Margin', value: accountData?.margin || 0, Icon: Activity },
-                    { title: 'Free Margin', value: accountData?.freeMargin || 0, Icon: LineChart }
+                    { title: 'Balance', value: getStatValue(accountData?.balance), Icon: Wallet },
+                    { title: 'Equity', value: getStatValue(accountData?.equity), Icon: CreditCard },
+                    { title: 'Margin', value: getStatValue(accountData?.margin), Icon: Activity },
+                    { title: 'Free Margin', value: getStatValue(accountData?.freeMargin), Icon: LineChart }
                 ].map((stat) => (
                     <div key={stat.title} className="bg-[#111827] rounded-lg p-4 border border-[#1f2937]">
                         <div className="flex justify-between items-start">
@@ -127,7 +133,7 @@ const Dashboard = ({ accountData, equityHistory }) => {
                                 <td className="p-2 text-right">{trade.openPrice}</td>
                                 <td className="p-2 text-right">{trade.stopLoss}/{trade.takeProfit}</td>
                                 <td className={`p-2 text-right ${trade.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                    ${trade.profit.toFixed(2)}
+                                    ${(trade.profit || 0).toFixed(2)}
                                 </td>
                             </tr>
                         ))}
