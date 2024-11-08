@@ -30,6 +30,9 @@ const WebTerminal = () => {
             console.log('WebSocket Disconnected');
             setConnected(false);
             setEAConnected(false);
+            setTimeout(() => {
+                window.location.reload();
+            }, 5000);
         };
         
         ws.onmessage = (event) => {
@@ -37,25 +40,44 @@ const WebTerminal = () => {
                 const data = JSON.parse(event.data);
                 console.log('Received data:', data);
                 
-                if (data.type === 'update' || data.type === 'status') {
+                if (data.type === 'update') {
                     setEAConnected(data.connected);
                     if (data.data) {
-                        // Set account data
-                        setAccountData(data.data.account);
-                        // Set positions if available
-                        if (data.data.positions) {
-                            setPositions(data.data.positions);
+                        if (data.data.account) {
+                            setAccountData({
+                                balance: parseFloat(data.data.account.balance || 0),
+                                equity: parseFloat(data.data.account.equity || 0),
+                                margin: parseFloat(data.data.account.margin || 0),
+                                freeMargin: parseFloat(data.data.account.freeMargin || 0)
+                            });
+
+                            if (data.data.account.equity) {
+                                setEquityHistory(prev => [
+                                    ...prev,
+                                    {
+                                        time: new Date().toLocaleTimeString(),
+                                        equity: parseFloat(data.data.account.equity)
+                                    }
+                                ].slice(-20));
+                            }
                         }
-                        
-                        // Track equity history
-                        if (data.data.account?.equity) {
-                            setEquityHistory(prev => [
-                                ...prev,
-                                {
-                                    time: new Date().toLocaleTimeString(),
-                                    equity: parseFloat(data.data.account.equity)
-                                }
-                            ].slice(-20)); // Keep only the last 20 entries
+
+                        if (Array.isArray(data.data.positions)) {
+                            const formattedPositions = data.data.positions.map(pos => ({
+                                ticket: pos.ticket,
+                                symbol: pos.symbol,
+                                type: parseInt(pos.type || 0),
+                                lots: parseFloat(pos.lots || 0),
+                                openPrice: parseFloat(pos.openPrice || 0),
+                                currentPrice: parseFloat(pos.currentPrice || 0),
+                                stopLoss: parseFloat(pos.stopLoss || 0),
+                                takeProfit: parseFloat(pos.takeProfit || 0),
+                                profit: parseFloat(pos.profit || 0),
+                                swap: parseFloat(pos.swap || 0)
+                            }));
+                            setPositions(formattedPositions);
+                        } else {
+                            setPositions([]);
                         }
                     }
                 }
@@ -182,7 +204,7 @@ const WebTerminal = () => {
                 </div>
             </div>
 
-            {/* Stats Grid with Gradient Cards */}
+            {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 backdrop-blur-lg border border-white/10">
                     <div className="flex flex-col p-6">
@@ -190,7 +212,7 @@ const WebTerminal = () => {
                             <div>
                                 <p className="text-sm text-gray-400">Balance</p>
                                 <p className="text-2xl font-bold mt-1">
-                                    ${accountData?.balance?.toFixed(2) || '0.00'}
+                                    ${(accountData?.balance || 0).toFixed(2)}
                                 </p>
                             </div>
                             <div className="p-2 bg-blue-500/20 rounded-lg">
@@ -199,11 +221,10 @@ const WebTerminal = () => {
                         </div>
                         <div className="mt-4">
                             <div className="text-sm text-blue-400">
-                                +${((accountData?.equity - accountData?.balance) || 0).toFixed(2)}
+                                +${((accountData?.equity || 0) - (accountData?.balance || 0)).toFixed(2)}
                             </div>
                         </div>
                     </div>
-                    <div className="absolute inset-0 pointer-events-none border border-white/5 rounded-2xl" />
                 </div>
 
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-lg border border-white/10">
@@ -212,7 +233,7 @@ const WebTerminal = () => {
                             <div>
                                 <p className="text-sm text-gray-400">Equity</p>
                                 <p className="text-2xl font-bold mt-1">
-                                    ${accountData?.equity?.toFixed(2) || '0.00'}
+                                    ${(accountData?.equity || 0).toFixed(2)}
                                 </p>
                             </div>
                             <div className="p-2 bg-purple-500/20 rounded-lg">
@@ -233,7 +254,6 @@ const WebTerminal = () => {
                             </ResponsiveContainer>
                         </div>
                     </div>
-                    <div className="absolute inset-0 pointer-events-none border border-white/5 rounded-2xl" />
                 </div>
 
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-pink-500/10 to-red-500/10 backdrop-blur-lg border border-white/10">
@@ -242,7 +262,7 @@ const WebTerminal = () => {
                             <div>
                                 <p className="text-sm text-gray-400">Free Margin</p>
                                 <p className="text-2xl font-bold mt-1">
-                                    ${accountData?.freeMargin?.toFixed(2) || '0.00'}
+                                    ${(accountData?.freeMargin || 0).toFixed(2)}
                                 </p>
                             </div>
                         </div>
@@ -252,7 +272,6 @@ const WebTerminal = () => {
                             </div>
                         </div>
                     </div>
-                    <div className="absolute inset-0 pointer-events-none border border-white/5 rounded-2xl" />
                 </div>
             </div>
 
@@ -344,7 +363,7 @@ const WebTerminal = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {positions.map((position) => (
+                                {positions && positions.map((position) => (
                                     <tr key={position.ticket} className="border-b border-white/5">
                                         <td className="py-3 px-4">{position.symbol}</td>
                                         <td className={position.type === 0 ? 'text-green-400' : 'text-red-400'}>
@@ -353,10 +372,10 @@ const WebTerminal = () => {
                                                 {position.type === 0 ? 'Buy' : 'Sell'}
                                             </div>
                                         </td>
-                                        <td className="text-right py-3 px-4">{position.lots.toFixed(2)}</td>
-                                        <td className="text-right py-3 px-4">{position.openPrice.toFixed(5)}</td>
+                                        <td className="text-right py-3 px-4">{position.lots?.toFixed(2) || '0.00'}</td>
+                                        <td className="text-right py-3 px-4">{position.openPrice?.toFixed(5) || '0.00000'}</td>
                                         <td className={`text-right py-3 px-4 ${position.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            ${position.profit.toFixed(2)}
+                                            ${position.profit?.toFixed(2) || '0.00'}
                                         </td>
                                         <td className="text-right py-3 px-4">
                                             <button
