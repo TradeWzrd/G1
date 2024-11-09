@@ -1,0 +1,115 @@
+## mt4-web-terminal Project Overview
+
+This project is a web application that provides a web-based terminal for interacting with MetaTrader 4 (MT4). It consists of two main parts:
+
+**1. Frontend (mt4-web-terminal/frontend):**
+
+- **Technology:** React
+- **Dependencies:**
+  - `@radix-ui/react-navigation-menu`, `@testing-library/jest-dom`, `@testing-library/react`, `@testing-library/user-event`, `autoprefixer`, `axios`, `clsx`, `lucide-react`, `postcss`, `react`, `react-dom`, `react-router-dom`, `react-scripts`, `recharts`, `tailwind-merge`, `tailwindcss`, `web-vitals`
+- **Scripts:**
+  - `start`: Starts the development server.
+  - `build`: Builds the application for production.
+  - `test`: Runs tests.
+  - `eject`: Ejects the application from `create-react-app`.
+- **Components:**
+  - `Dashboard`: Displays account information and trading statistics.
+  - `Layout`: Provides the main layout for the application.
+  - `TradingPanel`: Allows users to place and manage trades.
+  - `WebTerminal`: Provides a web-based terminal for interacting with MT4.
+
+**2. Backend (mt4-web-terminal/backend):**
+
+- **Technology:** Node.js with Express and WebSockets
+- **Dependencies:**
+  - `cors`, `dotenv`, `express`, `ws`, `morgan`, `uuid`
+- **Scripts:**
+  - `start`: Starts the backend server.
+  - `dev`: Starts the backend server with nodemon for automatic restarts on file changes.
+  - `build`: No build step required.
+- **Functionality:**
+  - Handles API requests for account information, positions, and trade execution.
+  - Uses WebSockets for real-time communication with the frontend.
+  - Receives updates from MT4 and broadcasts them to connected clients.
+  - Queues and sends trade commands to MT4.
+
+**Project Directory Structure:**
+
+```
+mt4-web-terminal/
+├── backend/
+│   ├── .env
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── server.js
+│   ├── websocket.js
+│   ├── config/
+│   ├── controllers/
+│   │   ├── authController.js
+│   │   └── mt4Controller.js
+│   ├── middleware/
+│   │   └── auth.js
+│   └── routes/
+│       ├── authRoutes.js
+│       ├── mt4Routes.js
+│       └── tradeRoutes.js
+└── frontend/
+    ├── .env
+    ├── .gitignore
+    ├── debug.log
+    ├── jsconfig.json
+    ├── package-lock.json
+    ├── package.json
+    ├── postcss.config.js
+    ├── README.md
+    ├── tailwind.config.js
+    ├── public/
+    │   ├── favicon.ico
+    │   ├── index.html
+    │   ├── logo192.png
+    │   ├── logo512.png
+    │   ├── manifest.json
+    │   └── robots.txt
+    └── src/
+        ├── App.css
+        ├── App.js
+        ├── App.test.js
+        ├── config.js
+        ├── index.css
+        ├── index.js
+        ├── logo.svg
+        ├── reportWebVitals.js
+        ├── setupTests.js
+        ├── components/
+        │   ├── Dashboard.js
+        │   ├── Layout.js
+        │   ├── TradingPanel.js
+        │   ├── WebTerminal.js
+        │   └── ui/
+        │       ├── alert.jsx
+        │       ├── button.jsx
+        │       ├── card.jsx
+        │       └── input.jsx
+        └── lib/
+            └── utils.js
+
+```
+
+**How to Run:**
+
+1. **Start the backend:**
+   - Navigate to the `mt4-web-terminal/backend` directory.
+   - Run `npm install` to install dependencies.
+   - Run `npm run dev` to start the server in development mode.
+
+2. **Start the frontend:**
+   - Navigate to the `mt4-web-terminal/frontend` directory.
+   - Run `npm install` to install dependencies.
+   - Run `npm start` to start the development server.
+
+The frontend will then communicate with the backend to provide the web-based terminal functionality.
+
+**Note:**
+
+- Ensure that you have Node.js and npm installed on your system.
+- The project may require additional setup or configuration depending on your specific MT4 environment.
