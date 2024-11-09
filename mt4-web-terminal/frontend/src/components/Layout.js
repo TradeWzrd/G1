@@ -1,51 +1,46 @@
 import React from 'react';
-import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutDashboard, LineChart } from 'lucide-react';
+import { LayoutDashboard, LineChart, Menu } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 
-const Layout = () => {
-  return (
-    <div className="flex h-screen bg-[#0a0f1a]">
-      {/* Sidebar */}
-      <div className="w-64 bg-[#111827] border-r border-gray-800">
-        <div className="p-4">
-          <h1 className="text-xl font-bold text-white">MT4 Terminal</h1>
+const Layout = ({ children }) => {
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    const menuItems = [
+        { name: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" />, path: '/' },
+        { name: 'Trading', icon: <LineChart className="w-4 h-4" />, path: '/trading' }
+    ];
+
+    return (
+        <div className="flex h-screen bg-[#0A0A0A]">
+            {/* Sidebar */}
+            <div className="w-64 border-r border-white/10 glass-effect">
+                <div className="p-4">
+                    <h1 className="text-xl font-bold text-gradient">MT4 Terminal</h1>
+                </div>
+                <nav className="mt-4">
+                    {menuItems.map((item) => (
+                        <button
+                            key={item.name}
+                            onClick={() => navigate(item.path)}
+                            className={`w-full flex items-center gap-3 px-4 py-2 text-sm 
+                                ${location.pathname === item.path 
+                                    ? 'bg-white/10 text-white' 
+                                    : 'text-gray-400 hover:bg-white/5'}`}
+                        >
+                            {item.icon}
+                            {item.name}
+                        </button>
+                    ))}
+                </nav>
+            </div>
+
+            {/* Main Content */}
+            <div className="flex-1 overflow-auto">
+                {children}
+            </div>
         </div>
-        <nav className="mt-6">
-          <NavLink
-            to="/dashboard"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 text-sm transition-colors ${
-                isActive 
-                  ? 'bg-[#1f2937] text-white border-l-2 border-blue-500' 
-                  : 'text-gray-400 hover:bg-[#1f2937] hover:text-white'
-              }`
-            }
-          >
-            <LayoutDashboard size={20} />
-            Dashboard
-          </NavLink>
-          <NavLink
-            to="/trading"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 text-sm transition-colors ${
-                isActive 
-                  ? 'bg-[#1f2937] text-white border-l-2 border-blue-500' 
-                  : 'text-gray-400 hover:bg-[#1f2937] hover:text-white'
-              }`
-            }
-          >
-            <LineChart size={20} />
-            Trading
-          </NavLink>
-        </nav>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 overflow-auto bg-[#0a0f1a]">
-        <Outlet />
-      </div>
-    </div>
-  );
+    );
 };
 
 export default Layout;
