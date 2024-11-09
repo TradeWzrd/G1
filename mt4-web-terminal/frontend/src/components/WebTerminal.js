@@ -1,404 +1,294 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Card } from './ui/card';
 import { LineChart, XAxis, YAxis, Tooltip, Line, ResponsiveContainer } from 'recharts';
-import { TrendingUp, TrendingDown, X, DollarSign, Wallet, Activity } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { 
+  TrendingUp, TrendingDown, 
+  DollarSign, Activity, 
+  X, RefreshCw, 
+  AlertCircle, Check 
+} from 'lucide-react';
 
 const WebTerminal = () => {
-    const [accountData, setAccountData] = useState(null);
-    const [positions, setPositions] = useState([]);
-    const [connected, setConnected] = useState(false);
-    const [eaConnected, setEAConnected] = useState(false);
-    const [error, setError] = useState(null);
-    const [equityHistory, setEquityHistory] = useState([]);
-    const [success, setSuccess] = useState(null);
-    const [newOrder, setNewOrder] = useState({
-        symbol: 'XAUUSDm',
-        lots: 0.01,
-        stopLoss: 0,
-        takeProfit: 0
-    });
-    const wsRef = useRef(null);
-    const reconnectTimeoutRef = useRef(null);
-    const navigate = useNavigate();
+  // State management
+  const [accountData, setAccountData] = useState({
+    balance: 0,
+    equity: 0,
+    margin: 0,
+    freeMargin: 0,
+    accountNumber: '',
+    currency: 'USD',
+    leverage: '',
+    server: ''
+  });
+  
+  const [positions, setPositions] = useState([]);
+  const [connected, setConnected] = useState(false);
+  const [eaConnected, setEAConnected] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
+  const wsRef = useRef(null);
+  
+  const [newOrder, setNewOrder] = useState({
+    symbol: 'BTCUSDm',
+    lots: 0.01,
+    stopLoss: 0,
+    takeProfit: 0
+  });
 
-    const connectWebSocket = useCallback(() => {
+  // WebSocket connection handler
+  useEffect(() => {
+    const connectWebSocket = () => {
+      const ws = new WebSocket('wss://g1-back.onrender.com');
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setConnected(true);
+        setMessage({ type: 'success', text: 'Connected to server' });
+      };
+
+      ws.onmessage = (event) => {
         try {
-            const ws = new WebSocket('wss://g1-back.onrender.com');
-            wsRef.current = ws;
-
-            ws.onopen = () => {
-                console.log('WebSocket Connected');
-                setConnected(true);
-                // Clear any pending reconnection attempts
-                if (reconnectTimeoutRef.current) {
-                    clearTimeout(reconnectTimeoutRef.current);
-                    reconnectTimeoutRef.current = null;
-                }
-            };
-
-            ws.onclose = () => {
-                console.log('WebSocket Disconnected');
-                setConnected(false);
-                setEAConnected(false);
-
-                // Only attempt reconnect if component is still mounted
-                if (!wsRef.current) return;
-
-                // Attempt to reconnect
-                reconnectTimeoutRef.current = setTimeout(() => {
-                    console.log('Attempting to reconnect...');
-                    connectWebSocket();
-                }, 5000);
-            };
-
-            ws.onerror = (error) => {
-                console.error('WebSocket Error:', error);
-            };
-
-            ws.onmessage = (event) => {
-                try {
-                    // Handle incoming messages
-                    const data = event.data;
-                    if (typeof data === 'string') {
-                        const parts = data.split('|');
-                        if (parts[0] === 'ACCOUNT') {
-                            // Process account data
-                            const accountData = parts[1].split(';');
-                            // Update account state...
-                            
-                            // If we have position data
-                            if (parts[2] === 'POSITIONS' && parts[3]) {
-                                // Process positions...
-                            }
-                            setEAConnected(true);
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error processing message:', error);
-                }
-            };
-
-            // Setup ping/pong to keep connection alive
-            const pingInterval = setInterval(() => {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send('ping');
-                }
-            }, 30000);
-
-            return () => {
-                clearInterval(pingInterval);
-                if (reconnectTimeoutRef.current) {
-                    clearTimeout(reconnectTimeoutRef.current);
-                }
-                wsRef.current = null; // Mark as intentionally disconnected
-                ws.close();
-            };
-        } catch (error) {
-            console.error('Error creating WebSocket:', error);
-            // Attempt to reconnect on error
-            reconnectTimeoutRef.current = setTimeout(connectWebSocket, 5000);
-        }
-    }, []);
-
-    useEffect(() => {
-        connectWebSocket();
-        
-        // Cleanup function
-        return () => {
-            if (wsRef.current) {
-                wsRef.current.close();
-            }
-            if (reconnectTimeoutRef.current) {
-                clearTimeout(reconnectTimeoutRef.current);
-            }
-        };
-    }, [connectWebSocket]);
-
-    const formatCurrency = (value) => {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'USD'
-        }).format(value || 0);
-    };
-
-    const executeTrade = async (type) => {
-        try {
-            console.log('Executing trade:', { type, ...newOrder });
-            const response = await fetch('https://g1-back.onrender.com/api/trade', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    action: 'open',
-                    symbol: newOrder.symbol,
-                    type: type, // 0 for BUY, 1 for SELL
-                    lots: parseFloat(newOrder.lots),
-                    stopLoss: parseFloat(newOrder.stopLoss || 0),
-                    takeProfit: parseFloat(newOrder.takeProfit || 0)
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            console.log('Trade response:', data);
+          const data = event.data;
+          if (typeof data === 'string' && data.startsWith('ACCOUNT|')) {
+            const [, accountStr, , positionsStr] = data.split('|');
+            const [balance, equity, margin, freeMargin, accountNumber, currency, leverage, server] = accountStr.split(';');
             
-            if (data.success) {
-                setSuccess('Order executed successfully!');
-                setError(null);
-                setTimeout(() => setSuccess(null), 3000); // Clear success message after 3 seconds
-            } else {
-                setError(data.error || 'Failed to execute order');
-            }
-        } catch (error) {
-            console.error('Trade error:', error);
-            setError('Network error: ' + error.message);
-        }
-    };
-
-    const handleClosePosition = async (ticket) => {
-        try {
-            const response = await fetch('https://g1-back.onrender.com/api/trade', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    action: 'close',
-                    ticket
-                })
+            setAccountData({
+              balance: parseFloat(balance),
+              equity: parseFloat(equity),
+              margin: parseFloat(margin),
+              freeMargin: parseFloat(freeMargin),
+              accountNumber,
+              currency,
+              leverage,
+              server
             });
+            
+            setEAConnected(true);
 
-            const data = await response.json();
-            if (data.success) {
-                setSuccess('Position closed successfully!');
-                setError(null);
-                setTimeout(() => setSuccess(null), 3000); // Clear success message after 3 seconds
-            } else {
-                setError(data.error || 'Failed to close position');
+            // Parse positions if they exist
+            if (positionsStr) {
+              const positionsList = positionsStr.split(';').filter(Boolean).map(pos => {
+                const [ticket, symbol, type, lots, openPrice, sl, tp, profit] = pos.split(',');
+                return {
+                  ticket: parseInt(ticket),
+                  symbol,
+                  type: parseInt(type),
+                  lots: parseFloat(lots),
+                  openPrice: parseFloat(openPrice),
+                  sl: parseFloat(sl),
+                  tp: parseFloat(tp),
+                  profit: parseFloat(profit)
+                };
+              });
+              setPositions(positionsList);
             }
+          }
         } catch (error) {
-            setError('Network error: ' + error.message);
+          console.error('Error processing message:', error);
+          setMessage({ type: 'error', text: 'Error processing data' });
         }
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        setEAConnected(false);
+        setMessage({ type: 'error', text: 'Disconnected from server' });
+        setTimeout(connectWebSocket, 5000);
+      };
+
+      return () => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        }
+      };
     };
 
-    const handleCloseAll = async () => {
-        try {
-            const response = await fetch('https://g1-back.onrender.com/api/trade', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    action: 'closeAll'
-                })
-            });
+    connectWebSocket();
+  }, []);
 
-            const data = await response.json();
-            if (data.success) {
-                setSuccess('Close all command sent successfully!');
-                setError(null);
-            } else {
-                setError(data.error || 'Failed to close positions');
-            }
-        } catch (error) {
-            console.error('Close all error:', error);
-            setError('Network error: ' + error.message);
-        }
-    };
+  // Trading functions
+  const handleTrade = async (type) => {
+    try {
+      const response = await fetch('https://g1-back.onrender.com/api/trade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'open',
+          symbol: newOrder.symbol,
+          type: type === 'buy' ? 0 : 1,
+          lots: newOrder.lots,
+          stopLoss: newOrder.stopLoss || 0,
+          takeProfit: newOrder.takeProfit || 0
+        })
+      });
 
-    return (
-        <div className="w-full h-full overflow-hidden bg-[#0A0A0A] text-white">
-            <div className="max-w-[1800px] mx-auto p-4 animate-blur-fade-in">
-                {/* Header */}
-                <div className="glass-effect rounded-xl p-4 mb-4">
-                    <div className="flex justify-between items-center">
-                        <div className="animate-slide-up">
-                            <h1 className="text-2xl font-bold text-gradient">
-                                Trading Terminal
-                            </h1>
-                            <p className="text-sm text-gray-400">Real-time market execution</p>
-                        </div>
-                        <div className="flex gap-2">
-                            <div className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 transition-all duration-300 
-                                ${connected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                                <Activity className="w-3 h-3" />
-                                {connected ? 'Connected' : 'Disconnected'}
-                            </div>
-                            <div className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 transition-all duration-300
-                                ${eaConnected ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                                <Activity className="w-3 h-3" />
-                                {eaConnected ? 'EA Active' : 'EA Inactive'}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+      const data = await response.json();
+      if (data.success) {
+        setMessage({ type: 'success', text: 'Order executed successfully' });
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to execute order' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Network error' });
+    }
+  };
 
-                {/* Stats Grid */}
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                    {['Balance', 'Equity', 'Free Margin'].map((title, index) => (
-                        <div key={title} 
-                             className="card-glow glass-effect rounded-xl p-4 animate-blur-fade-in"
-                             style={{ animationDelay: `${index * 100}ms` }}>
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-xs text-gray-400">{title}</p>
-                                    <p className="text-xl font-bold mt-1 text-white">
-                                        ${(accountData?.[title.toLowerCase().replace(' ', '')] || 0).toFixed(2)}
-                                    </p>
-                                </div>
-                                {/* Icons can be added here */}
-                            </div>
-                            {title === 'Balance' && (
-                                <div className="mt-2 text-xs text-blue-400">
-                                    +${((accountData?.equity || 0) - (accountData?.balance || 0)).toFixed(2)}
-                                </div>
-                            )}
-                            {title === 'Free Margin' && (
-                                <div className="mt-2 text-xs text-gray-400">
-                                    Used: ${(accountData?.margin || 0).toFixed(2)}
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
-
-                {/* Trading Interface */}
-                <div className="grid grid-cols-[350px,1fr] gap-4">
-                    {/* New Order Panel */}
-                    <div className="glass-effect rounded-xl p-4 animate-blur-fade-in">
-                        <h3 className="text-base font-bold mb-3 text-white">New Order</h3>
-                        <div className="space-y-3">
-                            <input
-                                type="text"
-                                value={newOrder.symbol}
-                                onChange={(e) => setNewOrder({...newOrder, symbol: e.target.value})}
-                                className="w-full h-9 bg-black/20 border border-white/10 rounded-lg px-3 text-sm text-white
-                                         focus:ring-2 focus:ring-blue-500/40 transition-all duration-300"
-                                placeholder="Symbol"
-                            />
-                            <input
-                                type="number"
-                                step="0.01"
-                                value={newOrder.lots}
-                                onChange={(e) => setNewOrder({...newOrder, lots: parseFloat(e.target.value)})}
-                                className="w-full h-9 bg-black/20 border border-white/10 rounded-lg px-3 text-sm text-white
-                                         focus:ring-2 focus:ring-blue-500/40 transition-all duration-300"
-                                placeholder="Lots"
-                            />
-                            <div className="grid grid-cols-2 gap-3">
-                                <input
-                                    type="number"
-                                    value={newOrder.stopLoss}
-                                    onChange={(e) => setNewOrder({...newOrder, stopLoss: parseFloat(e.target.value)})}
-                                    className="w-full h-9 bg-black/20 border border-white/10 rounded-lg px-3 text-sm text-white
-                                             focus:ring-2 focus:ring-blue-500/40 transition-all duration-300"
-                                    placeholder="Stop Loss"
-                                />
-                                <input
-                                    type="number"
-                                    value={newOrder.takeProfit}
-                                    onChange={(e) => setNewOrder({...newOrder, takeProfit: parseFloat(e.target.value)})}
-                                    className="w-full h-9 bg-black/20 border border-white/10 rounded-lg px-3 text-sm text-white
-                                             focus:ring-2 focus:ring-blue-500/40 transition-all duration-300"
-                                    placeholder="Take Profit"
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <button
-                                    onClick={() => executeTrade(0)}
-                                    className="h-9 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg 
-                                             text-sm font-medium flex items-center justify-center gap-1 transition-all duration-300"
-                                >
-                                    <TrendingUp className="w-4 h-4" />
-                                    Buy
-                                </button>
-                                <button
-                                    onClick={() => executeTrade(1)}
-                                    className="h-9 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg 
-                                             text-sm font-medium flex items-center justify-center gap-1 transition-all duration-300"
-                                >
-                                    <TrendingDown className="w-4 h-4" />
-                                    Sell
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Positions Table */}
-                    <div className="glass-effect rounded-xl p-4 animate-blur-fade-in" style={{ animationDelay: '200ms' }}>
-                        <div className="flex justify-between items-center mb-3">
-                            <h3 className="text-base font-bold text-white">Open Positions</h3>
-                            <button 
-                                onClick={() => handleCloseAll()}
-                                className="px-3 h-7 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm
-                                         transition-all duration-300"
-                            >
-                                Close All
-                            </button>
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="text-xs text-gray-400">
-                                        <th className="text-left py-2 font-medium">Symbol</th>
-                                        <th className="text-left py-2 font-medium">Type</th>
-                                        <th className="text-right py-2 font-medium">Lots</th>
-                                        <th className="text-right py-2 font-medium">Open Price</th>
-                                        <th className="text-right py-2 font-medium">Profit</th>
-                                        <th className="text-right py-2 font-medium">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="text-white">
-                                    {positions && positions.map((position) => (
-                                        <tr key={position.ticket} className="border-t border-white/5">
-                                            <td className="py-2 text-sm">{position.symbol}</td>
-                                            <td className={position.type === 0 ? 'text-green-400' : 'text-red-400'}>
-                                                <div className="flex items-center gap-1 text-sm">
-                                                    {position.type === 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                                                    {position.type === 0 ? 'Buy' : 'Sell'}
-                                                </div>
-                                            </td>
-                                            <td className="text-right text-sm">{position.lots?.toFixed(2) || '0.00'}</td>
-                                            <td className="text-right text-sm">{position.openPrice?.toFixed(5) || '0.00000'}</td>
-                                            <td className={`text-right text-sm ${position.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                ${position.profit?.toFixed(2) || '0.00'}
-                                            </td>
-                                            <td className="text-right">
-                                                <button
-                                                    onClick={() => handleClosePosition(position.ticket)}
-                                                    className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg"
-                                                >
-                                                    <X className="w-3 h-3" />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Status Messages */}
-            {error && (
-                <div className="fixed bottom-4 right-4 max-w-md p-3 glass-effect text-red-400 rounded-lg
-                             animate-blur-fade-in text-sm">
-                    {error}
-                </div>
-            )}
-            {success && (
-                <div className="fixed bottom-4 right-4 max-w-md p-3 glass-effect text-green-400 rounded-lg
-                             animate-blur-fade-in text-sm">
-                    {success}
-                </div>
-            )}
+  return (
+    <div className="min-h-screen bg-gray-900 text-white p-4">
+      {/* Status Bar */}
+      <div className="flex justify-between items-center mb-4">
+        <div className="text-xl font-bold">Trading Terminal</div>
+        <div className="flex gap-2">
+          <div className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 
+            ${connected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+            <Activity className="w-4 h-4" />
+            {connected ? 'Connected' : 'Disconnected'}
+          </div>
+          <div className={`px-3 py-1 rounded-full text-sm flex items-center gap-1
+            ${eaConnected ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+            <RefreshCw className="w-4 h-4" />
+            {eaConnected ? 'EA Active' : 'EA Inactive'}
+          </div>
         </div>
-    );
+      </div>
+
+      {/* Account Overview */}
+      <div className="grid grid-cols-4 gap-4 mb-4">
+        {[
+          { title: 'Balance', value: accountData.balance, icon: <DollarSign /> },
+          { title: 'Equity', value: accountData.equity, icon: <Activity /> },
+          { title: 'Margin', value: accountData.margin, icon: <TrendingUp /> },
+          { title: 'Free Margin', value: accountData.freeMargin, icon: <DollarSign /> }
+        ].map((item) => (
+          <Card key={item.title} className="bg-gray-800 border-gray-700">
+            <div className="p-4">
+              <div className="flex justify-between items-start">
+                <div className="text-gray-400 text-sm">{item.title}</div>
+                {item.icon}
+              </div>
+              <div className="text-2xl font-bold mt-2">
+                ${item.value.toFixed(2)}
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Trading Interface */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* Order Form */}
+        <Card className="bg-gray-800 border-gray-700">
+          <div className="p-4">
+            <h2 className="text-lg font-semibold mb-4">New Order</h2>
+            <div className="space-y-4">
+              <input
+                type="text"
+                value={newOrder.symbol}
+                onChange={(e) => setNewOrder({ ...newOrder, symbol: e.target.value })}
+                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                placeholder="Symbol"
+              />
+              <input
+                type="number"
+                value={newOrder.lots}
+                onChange={(e) => setNewOrder({ ...newOrder, lots: parseFloat(e.target.value) })}
+                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                placeholder="Lots"
+                step="0.01"
+                min="0.01"
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <input
+                  type="number"
+                  value={newOrder.stopLoss}
+                  onChange={(e) => setNewOrder({ ...newOrder, stopLoss: parseFloat(e.target.value) })}
+                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                  placeholder="Stop Loss"
+                />
+                <input
+                  type="number"
+                  value={newOrder.takeProfit}
+                  onChange={(e) => setNewOrder({ ...newOrder, takeProfit: parseFloat(e.target.value) })}
+                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                  placeholder="Take Profit"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => handleTrade('buy')}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded flex items-center justify-center gap-2"
+                >
+                  <TrendingUp className="w-4 h-4" />
+                  Buy
+                </button>
+                <button
+                  onClick={() => handleTrade('sell')}
+                  className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded flex items-center justify-center gap-2"
+                >
+                  <TrendingDown className="w-4 h-4" />
+                  Sell
+                </button>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Positions */}
+        <Card className="bg-gray-800 border-gray-700">
+          <div className="p-4">
+            <h2 className="text-lg font-semibold mb-4">Open Positions</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-gray-400 text-sm">
+                    <th className="text-left py-2">Symbol</th>
+                    <th className="text-left py-2">Type</th>
+                    <th className="text-right py-2">Lots</th>
+                    <th className="text-right py-2">Price</th>
+                    <th className="text-right py-2">Profit</th>
+                    <th className="text-right py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {positions.map((position) => (
+                    <tr key={position.ticket} className="border-t border-gray-700">
+                      <td className="py-2">{position.symbol}</td>
+                      <td className={position.type === 0 ? 'text-green-400' : 'text-red-400'}>
+                        {position.type === 0 ? 'Buy' : 'Sell'}
+                      </td>
+                      <td className="text-right">{position.lots}</td>
+                      <td className="text-right">{position.openPrice}</td>
+                      <td className={`text-right ${position.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        ${position.profit.toFixed(2)}
+                      </td>
+                      <td className="text-right">
+                        <button
+                          onClick={() => handleClosePosition(position.ticket)}
+                          className="p-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Messages */}
+      {message.text && (
+        <div className={`fixed bottom-4 right-4 p-4 rounded-lg flex items-center gap-2 ${
+          message.type === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+        }`}>
+          {message.type === 'success' ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {message.text}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default WebTerminal;
