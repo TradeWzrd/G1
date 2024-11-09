@@ -3,6 +3,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const WebSocket = require('ws');
 const { createServer } = require('http');
+const path = require('path');
 
 const app = express();
 const server = createServer(app);
@@ -216,6 +217,17 @@ wss.on('connection', (ws) => {
         console.log('Client disconnected');
         clients.delete(ws);
     });
+});
+
+// Add a catch-all route handler for client-side routing
+app.get('*', (req, res) => {
+    // Only redirect API 404s
+    if (req.url.startsWith('/api/')) {
+        res.status(404).json({ error: 'API endpoint not found' });
+    } else {
+        // For client routes, let React handle it
+        res.sendFile(path.join(__dirname, '../frontend/build/index.html'));
+    }
 });
 
 const PORT = process.env.PORT || 3000;

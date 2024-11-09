@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LineChart, XAxis, YAxis, Tooltip, Line, ResponsiveContainer } from 'recharts';
 import { TrendingUp, TrendingDown, X, DollarSign, Wallet, Activity } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const WebTerminal = () => {
     const [accountData, setAccountData] = useState(null);
@@ -16,80 +17,102 @@ const WebTerminal = () => {
         stopLoss: 0,
         takeProfit: 0
     });
+    const wsRef = useRef(null);
+    const reconnectTimeoutRef = useRef(null);
+    const navigate = useNavigate();
 
-    useEffect(() => {
-        const ws = new WebSocket('wss://g1-back.onrender.com');
-        
-        ws.onopen = () => {
-            console.log('WebSocket Connected');
-            setConnected(true);
-            setError(null);
-        };
-        
-        ws.onclose = () => {
-            console.log('WebSocket Disconnected');
-            setConnected(false);
-            setEAConnected(false);
-            setTimeout(() => {
-                window.location.reload();
-            }, 5000);
-        };
-        
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                console.log('Received data:', data);
-                
-                if (data.type === 'update') {
-                    setEAConnected(data.connected);
-                    if (data.data) {
-                        if (data.data.account) {
-                            setAccountData({
-                                balance: parseFloat(data.data.account.balance || 0),
-                                equity: parseFloat(data.data.account.equity || 0),
-                                margin: parseFloat(data.data.account.margin || 0),
-                                freeMargin: parseFloat(data.data.account.freeMargin || 0)
-                            });
+    const connectWebSocket = useCallback(() => {
+        try {
+            const ws = new WebSocket('wss://g1-back.onrender.com');
+            wsRef.current = ws;
 
-                            if (data.data.account.equity) {
-                                setEquityHistory(prev => [
-                                    ...prev,
-                                    {
-                                        time: new Date().toLocaleTimeString(),
-                                        equity: parseFloat(data.data.account.equity)
-                                    }
-                                ].slice(-20));
+            ws.onopen = () => {
+                console.log('WebSocket Connected');
+                setConnected(true);
+                // Clear any pending reconnection attempts
+                if (reconnectTimeoutRef.current) {
+                    clearTimeout(reconnectTimeoutRef.current);
+                    reconnectTimeoutRef.current = null;
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket Disconnected');
+                setConnected(false);
+                setEAConnected(false);
+
+                // Only attempt reconnect if component is still mounted
+                if (!wsRef.current) return;
+
+                // Attempt to reconnect
+                reconnectTimeoutRef.current = setTimeout(() => {
+                    console.log('Attempting to reconnect...');
+                    connectWebSocket();
+                }, 5000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket Error:', error);
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    // Handle incoming messages
+                    const data = event.data;
+                    if (typeof data === 'string') {
+                        const parts = data.split('|');
+                        if (parts[0] === 'ACCOUNT') {
+                            // Process account data
+                            const accountData = parts[1].split(';');
+                            // Update account state...
+                            
+                            // If we have position data
+                            if (parts[2] === 'POSITIONS' && parts[3]) {
+                                // Process positions...
                             }
-                        }
-
-                        if (Array.isArray(data.data.positions)) {
-                            const formattedPositions = data.data.positions.map(pos => ({
-                                ticket: pos.ticket,
-                                symbol: pos.symbol,
-                                type: parseInt(pos.type || 0),
-                                lots: parseFloat(pos.lots || 0),
-                                openPrice: parseFloat(pos.openPrice || 0),
-                                currentPrice: parseFloat(pos.currentPrice || 0),
-                                stopLoss: parseFloat(pos.stopLoss || 0),
-                                takeProfit: parseFloat(pos.takeProfit || 0),
-                                profit: parseFloat(pos.profit || 0),
-                                swap: parseFloat(pos.swap || 0)
-                            }));
-                            setPositions(formattedPositions);
-                        } else {
-                            setPositions([]);
+                            setEAConnected(true);
                         }
                     }
+                } catch (error) {
+                    console.error('Error processing message:', error);
                 }
-            } catch (error) {
-                console.error('Error processing message:', error);
+            };
+
+            // Setup ping/pong to keep connection alive
+            const pingInterval = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send('ping');
+                }
+            }, 30000);
+
+            return () => {
+                clearInterval(pingInterval);
+                if (reconnectTimeoutRef.current) {
+                    clearTimeout(reconnectTimeoutRef.current);
+                }
+                wsRef.current = null; // Mark as intentionally disconnected
+                ws.close();
+            };
+        } catch (error) {
+            console.error('Error creating WebSocket:', error);
+            // Attempt to reconnect on error
+            reconnectTimeoutRef.current = setTimeout(connectWebSocket, 5000);
+        }
+    }, []);
+
+    useEffect(() => {
+        connectWebSocket();
+        
+        // Cleanup function
+        return () => {
+            if (wsRef.current) {
+                wsRef.current.close();
+            }
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
             }
         };
-
-        return () => {
-            if (ws) ws.close();
-        };
-    }, []);
+    }, [connectWebSocket]);
 
     const formatCurrency = (value) => {
         return new Intl.NumberFormat('en-US', {
