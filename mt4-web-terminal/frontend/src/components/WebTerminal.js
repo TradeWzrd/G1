@@ -133,6 +133,53 @@ const WebTerminal = () => {
     }
   };
 
+  // Close position function
+  const handleClosePosition = async (ticket) => {
+    try {
+      const response = await fetch('https://g1-back.onrender.com/api/trade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'close',
+          ticket
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setMessage({ type: 'success', text: 'Position closed successfully' });
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to close position' });
+      }
+    } catch (error) {
+      console.error('Close position error:', error);
+      setMessage({ type: 'error', text: 'Network error while closing position' });
+    }
+  };
+
+  // Close all positions function
+  const handleCloseAll = async () => {
+    try {
+      const response = await fetch('https://g1-back.onrender.com/api/trade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'closeAll'
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setMessage({ type: 'success', text: 'All positions closed successfully' });
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to close positions' });
+      }
+    } catch (error) {
+      console.error('Close all error:', error);
+      setMessage({ type: 'error', text: 'Network error while closing positions' });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4">
       {/* Status Bar */}
