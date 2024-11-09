@@ -1,4 +1,12 @@
-app.post('/api/mt4/update', express.text(), (req, res) => {
+const router = require('express').Router();
+
+// Function to parse incoming data (assuming this function exists)
+const parseData = (dataString) => {
+    // ... existing parsing logic ...
+};
+
+// MT4 update endpoint
+router.post('/update', (req, res) => {
     try {
         console.log('Received MT4 update:', req.body);
         const data = parseData(req.body);
@@ -35,3 +43,15 @@ app.post('/api/mt4/update', express.text(), (req, res) => {
         });
     }
 });
+
+// MT4 trade endpoint
+router.post('/trade', (req, res) => {
+    try {
+        const tradeCommand = req.body;
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+module.exports = router;
