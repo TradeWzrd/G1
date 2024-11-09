@@ -32,25 +32,26 @@ function parseData(dataString) {
         }
 
         const parts = dataString.split('|');
-        if (parts.length < 4) {
+        if (parts.length < 2) {
             console.error('Invalid data format, insufficient parts:', parts.length);
             return null;
         }
 
         // Parse account data
         const [balance, equity, margin, freeMargin, accountNumber, currency, leverage, server] = parts[1].split(';');
+        
         const accountInfo = {
             balance: parseFloat(balance || 0),
             equity: parseFloat(equity || 0),
             margin: parseFloat(margin || 0),
             freeMargin: parseFloat(freeMargin || 0),
-            number: accountNumber || 'N/A',
+            accountNumber: accountNumber || 'N/A',
             currency: currency || 'USD',
             leverage: leverage || '1:100',
             server: server || 'Unknown'
         };
 
-        // Parse positions
+        // Parse positions if they exist
         const positions = parts[3] ? parts[3].split(';').filter(p => p).map(pos => {
             const [ticket, symbol, type, lots, openPrice, sl, tp, profit] = pos.split(',');
             return {
@@ -85,23 +86,20 @@ app.post('/api/mt4/update', express.text(), (req, res) => {
             lastUpdate = data;
             eaConnected = true;
 
-            // Get any pending commands and send them to EA
+            // Get pending commands and format them properly
             const commands = pendingCommands;
             pendingCommands = []; // Clear the queue
 
-            // Broadcast update to clients
-            broadcast({
-                type: 'update',
-                connected: true,
-                data: data
-            });
-
-            // Send response with pending commands
-            res.json({ 
+            // Send properly formatted response
+            const response = {
                 success: true,
-                commands: commands 
-            });
+                commands: commands // This should be an array of command strings
+            };
+
+            console.log('Sending response to EA:', response);
+            res.json(response);
         } else {
+            console.log('Invalid data format received');
             res.json({ 
                 success: false, 
                 error: 'Invalid data format',
@@ -118,25 +116,19 @@ app.post('/api/mt4/update', express.text(), (req, res) => {
     }
 });
 
-// Trade command handler
+// Trade command endpoint
 app.post('/api/trade', (req, res) => {
     try {
         const command = req.body;
         console.log('Received trade command:', command);
 
-        // Different validation for different actions
+        let formattedCommand = '';
+
+        // Format commands properly
         if (command.action === 'closeAll') {
-            const formattedCommand = 'CLOSEALL';
-            console.log('Formatted close all command:', formattedCommand);
-            pendingCommands.push(formattedCommand);
-            
-            return res.json({
-                success: true,
-                message: 'Close all command queued'
-            });
+            formattedCommand = 'CLOSEALL';
         } 
         else if (command.action === 'open') {
-            // Validate open trade parameters
             if (!command.symbol || command.type === undefined || !command.lots) {
                 return res.json({
                     success: false,
@@ -144,14 +136,7 @@ app.post('/api/trade', (req, res) => {
                 });
             }
 
-            const formattedCommand = `${command.type === 0 ? 'BUY' : 'SELL'},${command.symbol},${command.lots},${command.stopLoss || 0},${command.takeProfit || 0}`;
-            console.log('Formatted open command:', formattedCommand);
-            pendingCommands.push(formattedCommand);
-
-            return res.json({
-                success: true,
-                message: 'Trade command queued'
-            });
+            formattedCommand = `${command.type === 0 ? 'BUY' : 'SELL'},${command.symbol},${command.lots},${command.stopLoss || 0},${command.takeProfit || 0}`;
         }
         else if (command.action === 'close') {
             if (!command.ticket) {
@@ -161,14 +146,7 @@ app.post('/api/trade', (req, res) => {
                 });
             }
 
-            const formattedCommand = `CLOSE,${command.ticket}`;
-            console.log('Formatted close command:', formattedCommand);
-            pendingCommands.push(formattedCommand);
-
-            return res.json({
-                success: true,
-                message: 'Close command queued'
-            });
+            formattedCommand = `CLOSE,${command.ticket}`;
         }
         else {
             return res.json({
@@ -176,6 +154,18 @@ app.post('/api/trade', (req, res) => {
                 error: 'Invalid action'
             });
         }
+
+        // Add the formatted command to the queue
+        if (formattedCommand) {
+            pendingCommands.push(formattedCommand);
+            console.log('Added command to queue:', formattedCommand);
+            console.log('Current command queue:', pendingCommands);
+        }
+
+        res.json({
+            success: true,
+            message: 'Command queued successfully'
+        });
     } catch (error) {
         console.error('Trade error:', error);
         res.json({
