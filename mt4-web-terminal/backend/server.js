@@ -8,173 +8,111 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Use text parser instead of JSON parser for MT4 updates
+// Store connected clients and pending commands
+const clients = new Set();
+let lastUpdate = null;
+let eaConnected = false;
+let pendingCommands = [];
+
+// Middleware
 app.use(express.text());
 app.use(express.json());
 app.use(cors());
 app.use(morgan('dev'));
 
-// Store connected clients and pending commands
-const clients = new Set();
-let lastUpdate = null;
-let eaConnected = false;
+// WebSocket connection handler
+wss.on('connection', (ws) => {
+    clients.add(ws);
+    console.log('Client connected');
 
-// Store pending commands
-let pendingCommands = [];
-
-// Function to parse incoming data
-function parseData(dataString) {
-    try {
-        if (typeof dataString !== 'string') {
-            console.error('Invalid data type:', typeof dataString);
-            return null;
-        }
-
-        const parts = dataString.split('|');
-        if (parts.length < 4) {
-            console.error('Invalid data format, insufficient parts:', parts.length);
-            return null;
-        }
-
-        // Parse account data
-        const [balance, equity, margin, freeMargin, accountNumber, currency, leverage, server] = parts[1].split(';');
-        const accountInfo = {
-            balance: parseFloat(balance || 0),
-            equity: parseFloat(equity || 0),
-            margin: parseFloat(margin || 0),
-            freeMargin: parseFloat(freeMargin || 0),
-            number: accountNumber || 'N/A',
-            currency: currency || 'USD',
-            leverage: leverage || '1:100',
-            server: server || 'Unknown'
-        };
-
-        // Parse positions
-        const positions = parts[3] ? parts[3].split(';').filter(p => p).map(pos => {
-            const [ticket, symbol, type, lots, openPrice, sl, tp, profit] = pos.split(',');
-            return {
-                ticket: parseInt(ticket),
-                symbol,
-                type: parseInt(type),
-                lots: parseFloat(lots),
-                openPrice: parseFloat(openPrice),
-                stopLoss: parseFloat(sl),
-                takeProfit: parseFloat(tp),
-                profit: parseFloat(profit)
-            };
-        }) : [];
-
-        return {
-            account: accountInfo,
-            positions
-        };
-    } catch (error) {
-        console.error('Error parsing data:', error);
-        return null;
+    if (lastUpdate) {
+        ws.send(JSON.stringify({
+            type: 'status',
+            connected: true,
+            data: lastUpdate
+        }));
     }
-}
+
+    ws.on('close', () => {
+        clients.delete(ws);
+        console.log('Client disconnected');
+    });
+});
 
 // MT4 update endpoint
-app.post('/api/mt4/update', express.text(), (req, res) => {
+app.post('/api/mt4/update', (req, res) => {
     try {
         console.log('Received MT4 update:', req.body);
-        const data = parseData(req.body);
+        const data = req.body;
         
-        if (data) {
+        if (data && data.startsWith('ACCOUNT|')) {
             lastUpdate = data;
             eaConnected = true;
 
-            // Get any pending commands and send them to EA
+            // Get pending commands
             const commands = pendingCommands;
             pendingCommands = []; // Clear the queue
 
-            // Broadcast update to clients
-            broadcast({
+            // Broadcast to all connected clients
+            const wsMessage = JSON.stringify({
                 type: 'update',
-                connected: true,
                 data: data
             });
 
-            // Send response with pending commands
-            res.json({ 
-                success: true,
-                commands: commands 
+            clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(wsMessage);
+                }
             });
+
+            // Send text response with commands
+            const commandString = commands.join(';');
+            res.send(commandString || '');
+            
+            console.log('Sending commands to EA:', commandString);
         } else {
-            res.json({ 
-                success: false, 
-                error: 'Invalid data format',
-                commands: []
-            });
+            console.log('Invalid data format received');
+            res.send('');
         }
     } catch (error) {
         console.error('Error processing update:', error);
-        res.json({ 
-            success: false, 
-            error: error.message,
-            commands: []
-        });
+        res.send('');
     }
 });
 
-// Trade command handler
+// Trade endpoint
 app.post('/api/trade', (req, res) => {
     try {
         const command = req.body;
         console.log('Received trade command:', command);
 
-        // Different validation for different actions
-        if (command.action === 'closeAll') {
-            const formattedCommand = 'CLOSEALL';
-            console.log('Formatted close all command:', formattedCommand);
-            pendingCommands.push(formattedCommand);
-            
-            return res.json({
-                success: true,
-                message: 'Close all command queued'
-            });
-        } 
-        else if (command.action === 'open') {
-            // Validate open trade parameters
-            if (!command.symbol || command.type === undefined || !command.lots) {
-                return res.json({
-                    success: false,
-                    error: 'Missing required trade parameters'
-                });
-            }
+        let formattedCommand = '';
 
-            const formattedCommand = `${command.type === 0 ? 'BUY' : 'SELL'},${command.symbol},${command.lots},${command.stopLoss || 0},${command.takeProfit || 0}`;
-            console.log('Formatted open command:', formattedCommand);
-            pendingCommands.push(formattedCommand);
+        switch (command.action) {
+            case 'open':
+                formattedCommand = `${command.type === 0 ? 'buy' : 'sell'},${command.symbol},risk=${command.lots}`;
+                if (command.stopLoss) formattedCommand += `,sl=${command.stopLoss}`;
+                if (command.takeProfit) formattedCommand += `,tp=${command.takeProfit}`;
+                break;
 
-            return res.json({
-                success: true,
-                message: 'Trade command queued'
-            });
+            case 'close':
+                formattedCommand = `close,${command.ticket}`;
+                break;
+
+            case 'closeAll':
+                formattedCommand = `closeall,${command.symbol || 'ALL'}`;
+                break;
         }
-        else if (command.action === 'close') {
-            if (!command.ticket) {
-                return res.json({
-                    success: false,
-                    error: 'Missing ticket number'
-                });
-            }
 
-            const formattedCommand = `CLOSE,${command.ticket}`;
-            console.log('Formatted close command:', formattedCommand);
+        if (formattedCommand) {
             pendingCommands.push(formattedCommand);
+            console.log('Added command to queue:', formattedCommand);
+        }
 
-            return res.json({
-                success: true,
-                message: 'Close command queued'
-            });
-        }
-        else {
-            return res.json({
-                success: false,
-                error: 'Invalid action'
-            });
-        }
+        res.json({
+            success: true,
+            message: 'Command queued successfully'
+        });
     } catch (error) {
         console.error('Trade error:', error);
         res.json({
@@ -184,38 +122,40 @@ app.post('/api/trade', (req, res) => {
     }
 });
 
-// Get pending commands
-app.get('/api/trade/pending', (req, res) => {
-    res.json({ commands: pendingCommands });
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        wsClients: clients.size,
+        eaConnected
+    });
 });
 
-// Broadcast function
-function broadcast(data) {
-    const message = JSON.stringify(data);
-    clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(message);
-        }
-    });
-}
-
-// WebSocket connection handler
-wss.on('connection', (ws) => {
-    console.log('New client connected');
-    clients.add(ws);
-
-    if (lastUpdate) {
-        ws.send(JSON.stringify({
-            type: 'status',
-            connected: eaConnected,
-            data: lastUpdate
-        }));
-    }
-
-    ws.on('close', () => {
-        console.log('Client disconnected');
-        clients.delete(ws);
-    });
+// For the frontend SPA
+app.get('*', (req, res) => {
+    // Instead of serving a file, send a minimal HTML that loads your React app
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>MT4 Web Terminal</title>
+            <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+            <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+            <script src="https://unpkg.com/react-router-dom@6/umd/react-router-dom.production.min.js"></script>
+            <script src="https://cdn.tailwindcss.com"></script>
+        </head>
+        <body class="bg-[#0a0f1a] text-white">
+            <div id="root"></div>
+            <script type="module">
+                // Your bundled React app will be loaded here
+                import { App } from '/static/js/main.js';
+                ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+            </script>
+        </body>
+        </html>
+    `);
 });
 
 const PORT = process.env.PORT || 3000;
