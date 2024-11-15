@@ -8,10 +8,10 @@ const morgan = require('morgan');
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+const clients = new Set();
 
 // Global variables
-const clients = new Set();
-let pendingCommands = []; 
+const pendingCommands = []; 
 const historyRequests = new Map();
 const HISTORY_REQUEST_TIMEOUT = 30000; // 30 seconds
 
@@ -395,97 +395,9 @@ app.get('/api/trade-history/ea', (req, res) => {
     }, 30000); // 30 second timeout
 });
 
-// Trade command handler
-app.post('/api/trade', (req, res) => {
-    try {
-        const command = req.body;
-        console.log('Received trade command:', command);
-
-        // Different validation for different actions
-        if (command.action === 'closeAll') {
-            const formattedCommand = 'CLOSEALL';
-            console.log('Formatted close all command:', formattedCommand);
-            pendingCommands.push(formattedCommand);
-            
-            return res.json({
-                success: true,
-                message: 'Close all command queued'
-            });
-        } 
-        else if (command.action === 'open') {
-            // Validate open trade parameters
-            if (!command.symbol || command.type === undefined || !command.lots) {
-                return res.json({
-                    success: false,
-                    error: 'Missing required trade parameters'
-                });
-            }
-
-            const formattedCommand = `/ORDER ${command.symbol} MARKET type=${command.type === 0 ? 'buy' : 'sell'} qty=${command.lots}${command.stopLoss ? ' sl=' + command.stopLoss : ''}${command.takeProfit ? ' tp=' + command.takeProfit : ''} comment="Web Terminal"`;
-            console.log('Formatted open command:', formattedCommand);
-            pendingCommands.push(formattedCommand);
-
-            return res.json({
-                success: true,
-                message: 'Trade command queued'
-            });
-        }
-        else if (command.action === 'close') {
-            if (!command.ticket) {
-                return res.json({
-                    success: false,
-                    error: 'Missing ticket number'
-                });
-            }
-
-            const formattedCommand = `/ORDER ${command.symbol || 'current'} CLOSE id=${command.ticket}`;
-            console.log('Formatted close command:', formattedCommand);
-            pendingCommands.push(formattedCommand);
-
-            return res.json({
-                success: true,
-                message: 'Close command queued'
-            });
-        }
-        else if (command.action === 'modify') {
-            if (!command.ticket) {
-                return res.json({
-                    success: false,
-                    error: 'Missing ticket number'
-                });
-            }
-
-            const formattedCommand = `/ORDER ${command.symbol || 'current'} MODIFY id=${command.ticket}${command.stopLoss ? ' sl=' + command.stopLoss : ''}${command.takeProfit ? ' tp=' + command.takeProfit : ''}`;
-            console.log('Formatted modify command:', formattedCommand);
-            pendingCommands.push(formattedCommand);
-
-            return res.json({
-                success: true,
-                message: 'Modify command queued'
-            });
-        }
-        else {
-            return res.json({
-                success: false,
-                error: 'Invalid action'
-            });
-        }
-    } catch (error) {
-        console.error('Trade error:', error);
-        res.json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// Get pending commands
-app.get('/api/trade/pending', (req, res) => {
-    res.json({ commands: pendingCommands });
-});
-
 // Handle trade commands
-app.post('/trade', (req, res) => {
+app.post('/api/trade', (req, res) => {
+    console.log('Received trade command:', req.body);
     const { action, symbol, params } = req.body;
     
     if (!action || !symbol) {
@@ -504,18 +416,26 @@ app.post('/trade', (req, res) => {
 
     // Join with commas to create final command
     const finalCommand = command.join(',');
+    console.log('Sending command to MT4:', finalCommand);
     
-    // Send command to all connected clients
+    // Send command to all MT4 clients
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
+            const message = JSON.stringify({
                 type: 'command',
                 data: finalCommand
-            }));
+            });
+            console.log('Sending WebSocket message:', message);
+            client.send(message);
         }
     });
 
     res.json({ success: true, command: finalCommand });
+});
+
+// Get pending commands
+app.get('/api/trade/pending', (req, res) => {
+    res.json({ commands: pendingCommands });
 });
 
 // Broadcast function
@@ -544,40 +464,36 @@ wss.on('connection', (ws) => {
 
     // Handle incoming messages
     ws.on('message', (message) => {
+        console.log('Received WebSocket message:', message.toString());
         try {
             const data = JSON.parse(message);
-            console.log('Received WebSocket message:', data);
-
-            if (data.type === 'command' && data.command.startsWith('GET_HISTORY')) {
-                const requestId = data.id || Date.now().toString();
-                console.log(`Processing history request ${requestId}:`, data.command);
-
-                // Store request details
-                historyRequests.set(requestId, {
-                    timestamp: Date.now(),
-                    ws,
-                    command: data.command
+            
+            // Handle MT4 updates
+            if (message.toString().startsWith('ACCOUNT|')) {
+                console.log('Received MT4 update:', message.toString());
+                // Broadcast to all clients except the sender
+                clients.forEach(client => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                        client.send(message.toString());
+                    }
                 });
-
-                // Forward command to EA
-                pendingCommands.push({
-                    command: data.command,
-                    requestId
+            }
+            
+            // Handle history data
+            if (data.type === 'history_data') {
+                console.log('Received history data:', data);
+                // Broadcast history data to all clients
+                clients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN) {
+                        client.send(JSON.stringify({
+                            type: 'history_response',
+                            data: data.data
+                        }));
+                    }
                 });
-
-                // Broadcast command to EA
-                broadcast(JSON.stringify({
-                    type: 'command',
-                    command: data.command,
-                    requestId
-                }));
             }
         } catch (error) {
             console.error('Error processing WebSocket message:', error);
-            ws.send(JSON.stringify({
-                type: 'error',
-                error: 'Invalid message format'
-            }));
         }
     });
 
@@ -592,34 +508,10 @@ wss.on('connection', (ws) => {
             }
         }
     });
-});
 
-// WebSocket message handler
-wss.on('connection', (ws) => {
-    console.log('Client connected');
-    
-    ws.on('message', (message) => {
-        try {
-            const data = JSON.parse(message);
-            
-            if (data.type === 'history_data') {
-                // Broadcast history data to all connected clients
-                wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify({
-                            type: 'history_response',
-                            data: data.data
-                        }));
-                    }
-                });
-            }
-        } catch (error) {
-            console.error('Error processing message:', error);
-        }
-    });
-
-    ws.on('close', () => {
-        console.log('Client disconnected');
+    ws.on('error', (error) => {
+        console.error('WebSocket error:', error);
+        clients.delete(ws);
     });
 });
 

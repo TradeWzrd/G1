@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { LineChart, XAxis, YAxis, Tooltip, Line, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { TrendingUp, TrendingDown, X, DollarSign, Wallet, Activity, RefreshCw, BarChart2, Clock } from 'lucide-react';
 
+const API_URL = 'https://g1-back.onrender.com';
+
 const WebTerminal = () => {
     const [accountData, setAccountData] = useState(null);
     const [positions, setPositions] = useState([]);
@@ -150,7 +152,8 @@ const WebTerminal = () => {
 
     const sendTradeCommand = async (action, symbol, params = {}) => {
         try {
-            const response = await fetch('https://g1-back.onrender.com/api/trade', {
+            console.log('Sending trade command:', { action, symbol, params });
+            const response = await fetch(`${API_URL}/api/trade`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -168,6 +171,13 @@ const WebTerminal = () => {
 
             const result = await response.json();
             console.log('Trade command sent:', result);
+            
+            if (result.success) {
+                setSuccess('Trade command sent successfully');
+                setTimeout(() => setSuccess(null), 3000);
+            } else {
+                setError(result.error || 'Failed to send trade command');
+            }
         } catch (error) {
             console.error('Error sending trade command:', error);
             setError(error.message);
@@ -177,6 +187,7 @@ const WebTerminal = () => {
     const handleBuyClick = () => {
         const params = {
             risk: newOrder.lots,
+            comment: "Web Terminal"
         };
         if (newOrder.stopLoss) params.sl = newOrder.stopLoss;
         if (newOrder.takeProfit) params.tp = newOrder.takeProfit;
@@ -187,6 +198,7 @@ const WebTerminal = () => {
     const handleSellClick = () => {
         const params = {
             risk: newOrder.lots,
+            comment: "Web Terminal"
         };
         if (newOrder.stopLoss) params.sl = newOrder.stopLoss;
         if (newOrder.takeProfit) params.tp = newOrder.takeProfit;
