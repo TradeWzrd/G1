@@ -137,9 +137,9 @@ app.get('/api/mt4/commands', (req, res) => {
     if (pendingCommands.length > 0) {
         const command = pendingCommands.shift(); // Get and remove first command
         console.log('Sending command to EA:', command);
-        res.json(command);
+        res.send(command); // Send as plain text, not JSON
     } else {
-        res.json(''); // No commands pending
+        res.send(''); // No commands pending
     }
 });
 
@@ -152,44 +152,88 @@ app.post('/api/trade', (req, res) => {
     const { action, symbol, params } = req.body;
     console.log('Trade command received:', req.body);
 
+    // Validate required parameters
     if (!action || !symbol) {
         return res.status(400).json({ error: 'Missing required parameters' });
+    }
+
+    // Validate action
+    const validActions = ['buy', 'sell', 'close'];
+    if (!validActions.includes(action.toLowerCase())) {
+        return res.status(400).json({ error: 'Invalid action' });
+    }
+
+    // Validate symbol
+    if (!/^[A-Za-z0-9]+$/.test(symbol.split('-')[0])) {
+        return res.status(400).json({ error: 'Invalid symbol format' });
     }
 
     // Format command string in PineConnector format
     let command = LICENSE_ID + ',';
     
-    if (action === 'buy') {
-        command += 'buy,' + symbol;
-        if (params) {
-            if (params.lots) command += ',lots=' + params.lots;
-            if (params.sl && params.sl !== 0) command += ',sl=' + params.sl;
-            if (params.tp && params.tp !== 0) command += ',tp=' + params.tp;
-        }
-    }
-    else if (action === 'sell') {
-        command += 'sell,' + symbol;
-        if (params) {
-            if (params.lots) command += ',lots=' + params.lots;
-            if (params.sl && params.sl !== 0) command += ',sl=' + params.sl;
-            if (params.tp && params.tp !== 0) command += ',tp=' + params.tp;
-        }
-    }
-    else if (action === 'close') {
-        if (symbol.toLowerCase().includes('buy')) {
-            command += 'closelong,' + symbol.split('-')[1];
-        } else if (symbol.toLowerCase().includes('sell')) {
-            command += 'closeshort,' + symbol.split('-')[1];
-        } else {
-            command += 'closeall,' + symbol;
-        }
-    }
+    try {
+        if (action === 'buy') {
+            command += 'buy,' + symbol;
+            if (params) {
+                // Validate and normalize lots
+                const lots = parseFloat(params.lots) || 0.01;
+                if (lots < 0.01) {
+                    return res.status(400).json({ error: 'Invalid lots value' });
+                }
+                command += ',lots=' + lots.toFixed(2);
 
-    console.log('Formatted command:', command);
-    
-    // Add command to pending queue
-    pendingCommands.push(command);
-    res.json({ status: 'command_queued', command });
+                // Add optional parameters
+                if (params.sl && !isNaN(params.sl)) command += ',sl=' + parseFloat(params.sl);
+                if (params.tp && !isNaN(params.tp)) command += ',tp=' + parseFloat(params.tp);
+            } else {
+                command += ',lots=0.01'; // Default lots
+            }
+        }
+        else if (action === 'sell') {
+            command += 'sell,' + symbol;
+            if (params) {
+                // Validate and normalize lots
+                const lots = parseFloat(params.lots) || 0.01;
+                if (lots < 0.01) {
+                    return res.status(400).json({ error: 'Invalid lots value' });
+                }
+                command += ',lots=' + lots.toFixed(2);
+
+                // Add optional parameters
+                if (params.sl && !isNaN(params.sl)) command += ',sl=' + parseFloat(params.sl);
+                if (params.tp && !isNaN(params.tp)) command += ',tp=' + parseFloat(params.tp);
+            } else {
+                command += ',lots=0.01'; // Default lots
+            }
+        }
+        else if (action === 'close') {
+            const symbolParts = symbol.split('-');
+            if (symbolParts.length > 1) {
+                // Close specific position type
+                const posType = symbolParts[0].toLowerCase();
+                const actualSymbol = symbolParts[1];
+                if (posType === 'buy') {
+                    command += 'closelong,' + actualSymbol;
+                } else if (posType === 'sell') {
+                    command += 'closeshort,' + actualSymbol;
+                } else {
+                    return res.status(400).json({ error: 'Invalid position type' });
+                }
+            } else {
+                // Close all positions for symbol
+                command += 'closeall,' + symbol;
+            }
+        }
+
+        console.log('Formatted command:', command);
+        
+        // Add command to pending queue
+        pendingCommands.push(command);
+        res.json({ status: 'command_queued', command });
+    } catch (error) {
+        console.error('Error formatting command:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // WebSocket connection handler for web clients
