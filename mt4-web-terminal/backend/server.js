@@ -133,6 +133,7 @@ app.post('/api/mt4/update', (req, res) => {
 app.get('/api/mt4/commands', (req, res) => {
     if (pendingCommands.length > 0) {
         const command = pendingCommands.shift(); // Get and remove first command
+        console.log('Sending command to EA:', command);
         res.json(command);
     } else {
         res.json(''); // No commands pending
@@ -161,10 +162,10 @@ app.post('/api/trade', (req, res) => {
         if (params) {
             // Add lots
             if (params.lots) command += ',lots=' + params.lots;
-            // Add stop loss if provided
-            if (params.sl) command += ',sl=' + params.sl;
-            // Add take profit if provided
-            if (params.tp) command += ',tp=' + params.tp;
+            // Add stop loss if provided and not zero
+            if (params.sl && params.sl !== 0) command += ',sl=' + params.sl;
+            // Add take profit if provided and not zero
+            if (params.tp && params.tp !== 0) command += ',tp=' + params.tp;
             // Add comment if provided
             if (params.comment) command += ',comment=' + params.comment;
         }
