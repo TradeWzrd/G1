@@ -477,6 +477,43 @@ function broadcast(data) {
     });
 }
 
+// Function to process and forward commands to EA
+function processCommand(command) {
+    console.log('Processing command:', command);
+    if (typeof command.data === 'string') {
+        if (command.data.startsWith('GET_HISTORY')) {
+            const requestId = command.id || Date.now().toString();
+            console.log(`Processing history request ${requestId}:`, command.data);
+
+            // Store request details
+            historyRequests.set(requestId, {
+                timestamp: Date.now(),
+                command: command.data
+            });
+
+            // Forward command to EA
+            pendingCommands.push(command.data);
+            
+            // Broadcast command to EA
+            broadcast(JSON.stringify({
+                type: 'command',
+                command: command.data,
+                requestId
+            }));
+        } else {
+            // Handle other trade commands
+            console.log('Processing trade command:', command.data);
+            pendingCommands.push(command.data);
+            
+            // Broadcast command to EA
+            broadcast(JSON.stringify({
+                type: 'command',
+                command: command.data
+            }));
+        }
+    }
+}
+
 // WebSocket connection handler
 wss.on('connection', (ws) => {
     console.log('New client connected');
@@ -498,40 +535,7 @@ wss.on('connection', (ws) => {
             console.log('Received WebSocket message:', data);
 
             if (data.type === 'command') {
-                if (typeof data.data === 'string' && data.data.startsWith('GET_HISTORY')) {
-                    const requestId = data.id || Date.now().toString();
-                    console.log(`Processing history request ${requestId}:`, data.data);
-
-                    // Store request details
-                    historyRequests.set(requestId, {
-                        timestamp: Date.now(),
-                        ws,
-                        command: data.data
-                    });
-
-                    // Forward command to EA
-                    pendingCommands.push({
-                        command: data.data,
-                        requestId
-                    });
-
-                    // Broadcast command to EA
-                    broadcast(JSON.stringify({
-                        type: 'command',
-                        command: data.data,
-                        requestId
-                    }));
-                } else {
-                    // Handle other trade commands
-                    console.log('Processing trade command:', data.data);
-                    pendingCommands.push(data.data);
-                    
-                    // Broadcast command to EA
-                    broadcast(JSON.stringify({
-                        type: 'command',
-                        command: data.data
-                    }));
-                }
+                processCommand(data);
             }
         } catch (error) {
             console.error('Error processing WebSocket message:', error);
@@ -545,13 +549,6 @@ wss.on('connection', (ws) => {
     ws.on('close', () => {
         console.log('Client disconnected');
         clients.delete(ws);
-        
-        // Clean up any pending requests from this client
-        for (const [requestId, request] of historyRequests.entries()) {
-            if (request.ws === ws) {
-                historyRequests.delete(requestId);
-            }
-        }
     });
 });
 
