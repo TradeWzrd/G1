@@ -421,7 +421,7 @@ app.post('/api/trade', (req, res) => {
                 });
             }
 
-            const formattedCommand = `${command.type === 0 ? 'BUY' : 'SELL'},${command.symbol},${command.lots},${command.stopLoss || 0},${command.takeProfit || 0}`;
+            const formattedCommand = `/ORDER ${command.symbol} MARKET type=${command.type === 0 ? 'buy' : 'sell'} qty=${command.lots}${command.stopLoss ? ' sl=' + command.stopLoss : ''}${command.takeProfit ? ' tp=' + command.takeProfit : ''} comment="Web Terminal"`;
             console.log('Formatted open command:', formattedCommand);
             pendingCommands.push(formattedCommand);
 
@@ -438,13 +438,30 @@ app.post('/api/trade', (req, res) => {
                 });
             }
 
-            const formattedCommand = `CLOSE,${command.ticket}`;
+            const formattedCommand = `/ORDER ${command.symbol || 'current'} CLOSE id=${command.ticket}`;
             console.log('Formatted close command:', formattedCommand);
             pendingCommands.push(formattedCommand);
 
             return res.json({
                 success: true,
                 message: 'Close command queued'
+            });
+        }
+        else if (command.action === 'modify') {
+            if (!command.ticket) {
+                return res.json({
+                    success: false,
+                    error: 'Missing ticket number'
+                });
+            }
+
+            const formattedCommand = `/ORDER ${command.symbol || 'current'} MODIFY id=${command.ticket}${command.stopLoss ? ' sl=' + command.stopLoss : ''}${command.takeProfit ? ' tp=' + command.takeProfit : ''}`;
+            console.log('Formatted modify command:', formattedCommand);
+            pendingCommands.push(formattedCommand);
+
+            return res.json({
+                success: true,
+                message: 'Modify command queued'
             });
         }
         else {

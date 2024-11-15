@@ -105,226 +105,135 @@ void ProcessCommand(string rawCommand)
     // Skip if empty command
     if (StringLen(rawCommand) == 0) return;
     
-    // Check if this is a JSON command
-    if (StringFind(rawCommand, "{") != -1) {
-        string command = ExtractValueFromJson(rawCommand, "command");
-        string requestId = ExtractValueFromJson(rawCommand, "requestId");
+    // Remove array brackets and quotes if present
+    if (StringGetChar(rawCommand, 0) == '[') rawCommand = StringSubstr(rawCommand, 1);
+    if (StringGetChar(rawCommand, StringLen(rawCommand)-1) == ']') rawCommand = StringSubstr(rawCommand, 0, StringLen(rawCommand)-1);
+    if (StringGetChar(rawCommand, 0) == '"') rawCommand = StringSubstr(rawCommand, 1);
+    if (StringGetChar(rawCommand, StringLen(rawCommand)-1) == '"') rawCommand = StringSubstr(rawCommand, 0, StringLen(rawCommand)-1);
+    
+    // Handle history requests
+    if (StringFind(rawCommand, "GET_HISTORY") == 0) {
+        string parts[];
+        StringSplit(rawCommand, '|', parts);
         
-        if (StringLen(command) > 0) {
-            string parts[];
-            int numParts = StringSplit(command, '|', parts);
-            if (numParts > 0) {
-                string action = parts[0];
-                
-                if (action == "GET_HISTORY") {
-                    string period = numParts > 1 ? parts[1] : "ALL";
-                    string historyData = GetTradeHistory(period);
-                    
-                    // Append request ID if present
-                    if (StringLen(requestId) > 0) {
-                        historyData = StringConcatenate("HISTORY|REQUEST_ID|", requestId, "|", historyData);
-                    } else {
-                        historyData = StringConcatenate("HISTORY|", historyData);
-                    }
-                    
-                    SendToServer(historyData);
-                }
-                // Handle other commands here
-            }
-        }
+        string period = ArraySize(parts) > 1 ? parts[1] : "ALL";
+        string historyData = GetTradeHistory(period);
+        SendToServer(StringConcatenate("HISTORY|", historyData));
         return;
     }
     
-    // Handle non-JSON commands (legacy format)
+    // Process trading commands
+    if (StringFind(rawCommand, "/ORDER") != 0) {
+        Print("Invalid command format, must start with /ORDER");
+        return;
+    }
+    
+    // Split command into parts
     string parts[];
-    int numParts = StringSplit(rawCommand, '|', parts);
-    if (numParts < 1) return;
+    StringSplit(rawCommand, ' ', parts);
+    if (ArraySize(parts) < 3) {
+        Print("Invalid command format: not enough parts");
+        return;
+    }
     
-    string action = parts[0];
+    string symbol = parts[1];
+    string action = parts[2];
     
-    if(action == "BUY" || action == "SELL") {
-        if(numParts < 5) {
-            Print("Invalid buy/sell command format");
-            return;
-        }
+    // Parse parameters
+    string type = "";
+    double qty = 0;
+    double price = 0;
+    double sl = 0;
+    double tp = 0;
+    int ticket = 0;
+    
+    for (int i = 3; i < ArraySize(parts); i++) {
+        string param = parts[i];
+        string key_value[];
+        StringSplit(param, '=', key_value);
         
-        string symbol = parts[1];
-        double lots = StringToDouble(parts[2]);
-        double sl = StringToDouble(parts[3]);
-        double tp = StringToDouble(parts[4]);
+        if (ArraySize(key_value) != 2) continue;
         
-        int type = (action == "BUY") ? OP_BUY : OP_SELL;
+        string key = key_value[0];
+        string value = key_value[1];
         
+        // Remove quotes if present
+        if (StringGetChar(value, 0) == '"') value = StringSubstr(value, 1);
+        if (StringGetChar(value, StringLen(value)-1) == '"') value = StringSubstr(value, 0, StringLen(value)-1);
+        
+        if (key == "type") type = value;
+        else if (key == "qty") qty = StringToDouble(value);
+        else if (key == "price") price = StringToDouble(value);
+        else if (key == "sl") sl = StringToDouble(value);
+        else if (key == "tp") tp = StringToDouble(value);
+        else if (key == "id") ticket = (int)StringToInteger(value);
+    }
+    
+    // Execute commands
+    if (action == "MARKET") {
+        int orderType = type == "buy" ? OP_BUY : OP_SELL;
         RefreshRates();
-        double price = (type == OP_BUY) ? MarketInfo(symbol, MODE_ASK) : MarketInfo(symbol, MODE_BID);
+        price = orderType == OP_BUY ? MarketInfo(symbol, MODE_ASK) : MarketInfo(symbol, MODE_BID);
         
-        Print("Executing order: ", symbol, " ", type, " ", lots, " @ ", price, " sl:", sl, " tp:", tp);
+        Print("Executing market order: ", symbol, " ", orderType, " ", qty, " @ ", price, " sl:", sl, " tp:", tp);
         
-        // Add some validation
-        if(lots <= 0) {
-            Print("Invalid lot size: ", lots);
-            return;
-        }
-        
-        if(price <= 0) {
-            Print("Invalid price: ", price);
+        if (qty <= 0) {
+            Print("Invalid lot size: ", qty);
             return;
         }
         
         int ticket = OrderSend(
             symbol,          // Symbol
-            type,           // Operation
-            lots,           // Lots
+            orderType,       // Operation
+            qty,            // Lots
             price,          // Price
-            3,             // Slippage
-            sl,            // Stop Loss
-            tp,            // Take Profit
+            3,              // Slippage
+            sl,             // Stop Loss
+            tp,             // Take Profit
             "Web Terminal", // Comment
             0,             // Magic Number
             0,             // Expiration
-            type == OP_BUY ? clrBlue : clrRed
+            orderType == OP_BUY ? clrBlue : clrRed
         );
         
-        if(ticket < 0) {
+        if (ticket < 0) {
             int error = GetLastError();
             Print("Order failed - Error: ", error);
-            switch(error) {
-                case ERR_INVALID_PRICE:
-                    Print("Invalid price level");
-                    break;
-                case ERR_INVALID_STOPS:
-                    Print("Invalid stops");
-                    break;
-                case ERR_INVALID_TRADE_VOLUME:
-                    Print("Invalid lot size");
-                    break;
-                case ERR_NOT_ENOUGH_MONEY:
-                    Print("Not enough money");
-                    break;
-                default:
-                    Print("Other error");
-                    break;
-            }
         } else {
-            Print("Order executed successfully - Ticket: ", ticket);
+            Print("Order executed successfully. Ticket: ", ticket);
         }
     }
-    else if(StringFind(action, "CLOSEALL") == 0) {
-        Print("Executing Close All command");
-        int type = -1;
-        
-        // Check if type is specified
-        if(numParts > 1) {
-            type = StringToInteger(parts[1]);
-            Print("Closing all positions of type: ", type);
-        } else {
-            Print("Closing all positions");
+    else if (action == "CLOSE") {
+        if (ticket <= 0) {
+            Print("Invalid ticket number");
+            return;
         }
         
-        bool success = true;
-        for(int i = OrdersTotal() - 1; i >= 0; i--) {
-            if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
-                // Check if we should close this position
-                if(type == -1 || OrderType() == type) {
-                    RefreshRates();
-                    double closePrice = OrderType() == OP_BUY ? 
-                        MarketInfo(OrderSymbol(), MODE_BID) : 
-                        MarketInfo(OrderSymbol(), MODE_ASK);
-                        
-                    bool result = OrderClose(OrderTicket(), OrderLots(), closePrice, 3);
-                    if(!result) {
-                        Print("Failed to close order #", OrderTicket(), " Error: ", GetLastError());
-                        success = false;
-                    } else {
-                        Print("Successfully closed order #", OrderTicket());
-                    }
-                }
-            }
-        }
-        Print("Close All operation completed. Success: ", success);
-    }
-    else if(action == "CLOSE") {
-        if(numParts < 2) return;
-        
-        int ticket = StringToInteger(parts[1]);
-        double lots = OrderLots(); // Default to full position
-        
-        // If partial close is requested
-        if(numParts > 2) {
-            double percentage = StringToDouble(parts[2]);
-            if(percentage > 0 && percentage < 100) {
-                lots = NormalizeDouble(OrderLots() * percentage / 100, 2);
-            }
+        if (!OrderSelect(ticket, SELECT_BY_TICKET)) {
+            Print("Order not found: ", ticket);
+            return;
         }
         
-        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
-            RefreshRates();
-            double closePrice = OrderType() == OP_BUY ? 
-                MarketInfo(OrderSymbol(), MODE_BID) : 
-                MarketInfo(OrderSymbol(), MODE_ASK);
-                
-            bool result = OrderClose(ticket, lots, closePrice, 3);
-            if(!result) {
-                Print("Failed to close order #", ticket, " Error: ", GetLastError());
-            } else {
-                Print("Successfully closed order #", ticket, " Lots: ", lots);
-            }
+        bool success = OrderClose(OrderTicket(), OrderLots(), OrderClosePrice(), 3, clrWhite);
+        if (!success) {
+            Print("Failed to close order: ", GetLastError());
         }
     }
-    else if(action == "MODIFY") {
-        if(numParts < 4) return;
-        
-        int ticket = StringToInteger(parts[1]);
-        double sl = StringToDouble(parts[2]);
-        double tp = StringToDouble(parts[3]);
-        
-        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
-            bool result = OrderModify(ticket, OrderOpenPrice(), sl, tp, 0);
-            if(!result) {
-                Print("Failed to modify order #", ticket, " Error: ", GetLastError());
-            } else {
-                Print("Successfully modified order #", ticket);
-            }
-        }
-    }
-    else if(action == "BREAKEVEN") {
-        if(numParts < 2) return;
-        
-        int ticket = StringToInteger(parts[1]);
-        double pips = 0;
-        
-        // Optional pips buffer
-        if(numParts > 2) {
-            pips = StringToDouble(parts[2]);
+    else if (action == "MODIFY") {
+        if (ticket <= 0) {
+            Print("Invalid ticket number");
+            return;
         }
         
-        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
-            double openPrice = OrderOpenPrice();
-            double newSL = openPrice;
-            
-            // Add pips buffer if specified
-            if(pips > 0) {
-                double pipValue = MarketInfo(OrderSymbol(), MODE_POINT) * 10;
-                if(OrderType() == OP_BUY) {
-                    newSL += pips * pipValue;
-                } else if(OrderType() == OP_SELL) {
-                    newSL -= pips * pipValue;
-                }
-            }
-            
-            bool result = OrderModify(ticket, openPrice, newSL, OrderTakeProfit(), 0);
-            if(!result) {
-                Print("Failed to set breakeven for order #", ticket, " Error: ", GetLastError());
-            } else {
-                Print("Successfully set breakeven for order #", ticket);
-            }
+        if (!OrderSelect(ticket, SELECT_BY_TICKET)) {
+            Print("Order not found: ", ticket);
+            return;
         }
-    }
-    else if(action == "GET_HISTORY") {
-        string period = numParts > 1 ? parts[1] : "ALL";
-        string historyData = GetTradeHistory(period);
-        historyData = StringConcatenate("HISTORY|", historyData);
-        SendToServer(historyData);
+        
+        bool success = OrderModify(ticket, OrderOpenPrice(), sl, tp, 0, clrYellow);
+        if (!success) {
+            Print("Failed to modify order: ", GetLastError());
+        }
     }
 }
 
