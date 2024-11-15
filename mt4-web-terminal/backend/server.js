@@ -11,13 +11,11 @@ const wss = new WebSocket.Server({ server });
 
 // Global variables
 const clients = new Set();
-const pendingCommands = [];
+let pendingCommands = []; 
 const historyRequests = new Map();
 
 // Store trade history
 let tradeHistory = [];
-
-// Store connected clients and pending commands
 let lastUpdate = null;
 let eaConnected = false;
 let lastEAUpdate = null;
@@ -37,43 +35,44 @@ function parseData(dataString) {
         }
 
         const parts = dataString.split('|');
-        if (parts.length < 4) {
-            console.error('Invalid data format, insufficient parts:', parts.length);
-            return null;
-        }
+        if (parts.length < 2) return null;
+
+        const data = {
+            account: {},
+            positions: [],
+            history: []
+        };
 
         // Parse account data
-        const [balance, equity, margin, freeMargin, accountNumber, currency, leverage, server] = parts[1].split(';');
-        const accountInfo = {
-            balance: parseFloat(balance || 0),
-            equity: parseFloat(equity || 0),
-            margin: parseFloat(margin || 0),
-            freeMargin: parseFloat(freeMargin || 0),
-            number: accountNumber || 'N/A',
-            currency: currency || 'USD',
-            leverage: leverage || '1:100',
-            server: server || 'Unknown'
-        };
+        if (parts[0] === 'ACCOUNT' && parts[1]) {
+            const [balance, equity, margin, freeMargin] = parts[1].split(';');
+            data.account = {
+                balance: parseFloat(balance),
+                equity: parseFloat(equity),
+                margin: parseFloat(margin),
+                freeMargin: parseFloat(freeMargin)
+            };
+        }
 
         // Parse positions
-        const positions = parts[3] ? parts[3].split(';').filter(p => p).map(pos => {
-            const [ticket, symbol, type, lots, openPrice, sl, tp, profit] = pos.split(',');
-            return {
-                ticket: parseInt(ticket),
-                symbol,
-                type: parseInt(type),
-                lots: parseFloat(lots),
-                openPrice: parseFloat(openPrice),
-                stopLoss: parseFloat(sl),
-                takeProfit: parseFloat(tp),
-                profit: parseFloat(profit)
-            };
-        }) : [];
+        if (parts[2] === 'POSITIONS' && parts[3]) {
+            const positions = parts[3].split(';');
+            data.positions = positions.filter(p => p).map(pos => {
+                const [ticket, symbol, type, lots, openPrice, sl, tp, profit] = pos.split(',');
+                return {
+                    ticket: parseInt(ticket),
+                    symbol,
+                    type: parseInt(type),
+                    lots: parseFloat(lots),
+                    openPrice: parseFloat(openPrice),
+                    sl: parseFloat(sl),
+                    tp: parseFloat(tp),
+                    profit: parseFloat(profit)
+                };
+            });
+        }
 
-        return {
-            account: accountInfo,
-            positions
-        };
+        return data;
     } catch (error) {
         console.error('Error parsing data:', error);
         return null;
@@ -89,10 +88,11 @@ app.post('/api/mt4/update', express.text(), (req, res) => {
         if (data) {
             lastUpdate = data;
             eaConnected = true;
+            lastEAUpdate = Date.now();
 
             // Get any pending commands and send them to EA
-            const commands = pendingCommands;
-            pendingCommands = []; // Clear the queue
+            const commands = [...pendingCommands]; 
+            pendingCommands.length = 0; 
 
             // Broadcast update to clients
             broadcast({
@@ -108,17 +108,15 @@ app.post('/api/mt4/update', express.text(), (req, res) => {
             });
         } else {
             res.json({ 
-                success: false, 
-                error: 'Invalid data format',
-                commands: []
+                success: false,
+                error: 'Invalid data format'
             });
         }
     } catch (error) {
         console.error('Error processing update:', error);
         res.json({ 
-            success: false, 
-            error: error.message,
-            commands: []
+            success: false,
+            error: error.message
         });
     }
 });
