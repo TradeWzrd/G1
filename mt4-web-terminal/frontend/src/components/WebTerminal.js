@@ -603,43 +603,46 @@ const WebTerminal = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-700">
-                            {sortedHistory.map((trade) => (
-                                <tr key={`${trade.ticket}-${trade.closeTime}`}>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                        {trade.ticket}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                        {trade.symbol}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                        {getOrderTypeString(trade.type)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                        {trade.lots.toFixed(2)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                        {trade.openPrice.toFixed(5)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                        {trade.closePrice.toFixed(5)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                        {formatDateTime(trade.closeTime)}
-                                    </td>
-                                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${trade.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                        {trade.profit.toFixed(2)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                        {trade.commission.toFixed(2)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                        {trade.swap.toFixed(2)}
-                                    </td>
-                                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${trade.total >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                        {trade.total.toFixed(2)}
-                                    </td>
-                                </tr>
-                            ))}
+                            {sortedHistory.map((trade) => {
+                                const total = (trade.profit || 0) + (trade.commission || 0) + (trade.swap || 0);
+                                return (
+                                    <tr key={`${trade.ticket}-${trade.closeTime}`}>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                            {trade.ticket}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                            {trade.symbol}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                            {getOrderTypeString(trade.type)}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                            {(trade.lots || 0).toFixed(2)}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                            {(trade.openPrice || 0).toFixed(5)}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                            {(trade.closePrice || 0).toFixed(5)}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                            {formatDateTime(trade.closeTime)}
+                                        </td>
+                                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${trade.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {(trade.profit || 0).toFixed(2)}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                            {(trade.commission || 0).toFixed(2)}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                            {(trade.swap || 0).toFixed(2)}
+                                        </td>
+                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${total >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {total.toFixed(2)}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
