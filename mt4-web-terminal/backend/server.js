@@ -152,14 +152,26 @@ app.post('/api/trade', (req, res) => {
         return res.status(400).json({ error: 'Missing required parameters' });
     }
 
-    // Format command
-    let command = `${action},${symbol}`;
-    if (params) {
-        Object.entries(params).forEach(([key, value]) => {
-            command += `,${key}=${value}`;
-        });
+    // Format command string
+    let command = action;  // Start with action
+    if (action === 'close') {
+        command += ',' + symbol;  // For close, symbol is the ticket number
+    } else {
+        command += ',' + symbol;  // For buy/sell, symbol is the trading symbol
+        if (params) {
+            // Add lots
+            if (params.lots) command += ',lots=' + params.lots;
+            // Add stop loss if provided
+            if (params.sl) command += ',sl=' + params.sl;
+            // Add take profit if provided
+            if (params.tp) command += ',tp=' + params.tp;
+            // Add comment if provided
+            if (params.comment) command += ',comment=' + params.comment;
+        }
     }
 
+    console.log('Formatted command:', command);
+    
     // Add command to pending queue
     pendingCommands.push(command);
     res.json({ status: 'command_queued', command });

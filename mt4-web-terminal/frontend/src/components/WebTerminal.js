@@ -33,18 +33,27 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
             return;
         }
 
+        if (!ticket && !newOrder.symbol) {
+            toast.error('Symbol is required');
+            return;
+        }
+
         setLoading(true);
         try {
             const command = {
                 action,
-                symbol: ticket ? ticket.toString() : newOrder.symbol,
-                params: ticket ? {} : {
+                // For close action, use ticket as symbol
+                symbol: action === 'close' ? ticket : newOrder.symbol,
+                // Only include params for buy/sell actions
+                params: action === 'close' ? undefined : {
                     lots: parseFloat(newOrder.lots) || 0.01,
                     sl: parseFloat(newOrder.stopLoss) || 0,
                     tp: parseFloat(newOrder.takeProfit) || 0,
                     comment: newOrder.comment || 'Web Terminal'
                 }
             };
+
+            console.log('Sending trade command:', command);
 
             const response = await fetch('https://g1-back.onrender.com/api/trade', {
                 method: 'POST',
@@ -55,9 +64,12 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
             });
 
             if (!response.ok) {
-                const error = await response.text();
-                throw new Error(error);
+                const error = await response.json();
+                throw new Error(error.error || 'Trade command failed');
             }
+
+            const result = await response.json();
+            console.log('Trade response:', result);
 
             toast.success(`${action.toUpperCase()} order sent successfully`);
             
