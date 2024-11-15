@@ -103,6 +103,7 @@ app.post('/api/mt4/update', (req, res) => {
         type: 'update',
         data,
         connected: true,
+        eaConnected: true,
         timestamp: Date.now()
     });
 
@@ -111,6 +112,10 @@ app.post('/api/mt4/update', (req, res) => {
 
 // Trade command endpoint
 app.post('/api/trade', (req, res) => {
+    if (!eaConnected) {
+        return res.status(503).json({ error: 'EA is not connected' });
+    }
+
     const { action, symbol, params } = req.body;
     console.log('Trade command received:', req.body);
 
@@ -131,7 +136,8 @@ app.post('/api/trade', (req, res) => {
     // Broadcast command to all clients
     broadcast({
         type: 'command',
-        data: command
+        data: command,
+        timestamp: Date.now()
     });
 
     res.json({ status: 'command_sent', command });
@@ -149,10 +155,19 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({
             type: 'update',
             data: latestAccountData,
-            connected: eaConnected,
+            connected: true,
+            eaConnected,
             timestamp: lastEAUpdate
         }));
     }
+
+    // Send current EA status
+    ws.send(JSON.stringify({
+        type: 'status',
+        connected: true,
+        eaConnected,
+        timestamp: Date.now()
+    }));
 
     ws.on('close', () => {
         webClients.delete(ws);
@@ -162,13 +177,21 @@ wss.on('connection', (ws, req) => {
 
 // Check EA connection status
 setInterval(() => {
-    if (Date.now() - lastEAUpdate > 10000) {
+    const now = Date.now();
+    const wasConnected = eaConnected;
+    
+    if (now - lastEAUpdate > 10000) {
         eaConnected = false;
-        broadcast({
-            type: 'status',
-            connected: false,
-            timestamp: Date.now()
-        });
+        
+        // Only broadcast if the status changed
+        if (wasConnected !== eaConnected) {
+            broadcast({
+                type: 'status',
+                connected: true,
+                eaConnected: false,
+                timestamp: now
+            });
+        }
     }
 }, 5000);
 
