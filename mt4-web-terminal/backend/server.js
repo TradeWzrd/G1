@@ -408,35 +408,32 @@ wss.on('connection', (ws) => {
     // Handle incoming messages
     ws.on('message', (message) => {
         try {
-            const data = JSON.parse(message);
+            const data = JSON.parse(message.toString());
             console.log('Received WebSocket message:', data);
 
             if (data.type === 'command') {
                 const [cmd, ...params] = data.command.split('|');
+                console.log('Processing command:', cmd, 'with params:', params);
                 
                 if (cmd === 'GET_HISTORY') {
-                    const period = params[0];
-                    console.log('Processing history request for period:', period);
-                    
                     // Add command to pending queue for EA to process
                     pendingCommands.push(data.command);
+                    console.log('Added history request to pending commands:', data.command);
                     
-                    // Create a promise to track this request
+                    // Create a request tracker
                     const requestId = Date.now().toString();
-                    const requestPromise = new Promise((resolve) => {
-                        historyRequests.set(requestId, resolve);
-                        
-                        // Timeout after 30 seconds
-                        setTimeout(() => {
-                            if (historyRequests.has(requestId)) {
-                                historyRequests.delete(requestId);
-                                ws.send(JSON.stringify({
-                                    type: 'error',
-                                    error: 'History request timed out'
-                                }));
-                            }
-                        }, 30000);
-                    });
+                    historyRequests.set(requestId, ws);
+                    
+                    // Set timeout for request
+                    setTimeout(() => {
+                        if (historyRequests.has(requestId)) {
+                            historyRequests.delete(requestId);
+                            ws.send(JSON.stringify({
+                                type: 'error',
+                                error: 'History request timed out'
+                            }));
+                        }
+                    }, 30000);
                 }
             }
         } catch (error) {
@@ -454,18 +451,18 @@ wss.on('connection', (ws) => {
     });
 });
 
+// Handle trade history from EA
 app.post('/api/trade-history/ea', (req, res) => {
     try {
-        // Parse the raw JSON data from EA
+        console.log('Received trade history from EA:', req.body);
         const historyData = req.body;
-        console.log('Received trade history:', historyData);
 
         // Broadcast to all connected WebSocket clients
         wss.clients.forEach(client => {
             if (client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify({
                     type: 'tradeHistory',
-                    data: historyData
+                    data: historyData.data
                 }));
             }
         });
@@ -473,7 +470,10 @@ app.post('/api/trade-history/ea', (req, res) => {
         res.json({ success: true });
     } catch (error) {
         console.error('Error processing trade history:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
     }
 });
 
