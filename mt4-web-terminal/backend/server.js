@@ -23,6 +23,12 @@ let lastEAUpdate = null;
 // Store pending commands
 let pendingCommands = [];
 
+// Store trade history
+let tradeHistory = [];
+
+// Store history requests
+const historyRequests = new Map();
+
 // Function to parse incoming data
 function parseData(dataString) {
     try {
@@ -164,32 +170,36 @@ app.post('/api/ea-data', (req, res) => {
         }
 
         // Process history
-        const history = [];
         if (historySection) {
             const historyStrings = historySection.split(';');
             historyStrings.forEach(hist => {
                 if (hist) {
                     const [ticket, symbol, type, lots, openPrice, closePrice, openTime, closeTime, profit, commission, swap] = hist.split(',');
-                    history.push({
+                    const trade = {
                         ticket: parseInt(ticket),
                         symbol,
                         type: parseInt(type),
                         lots: parseFloat(lots),
                         openPrice: parseFloat(openPrice),
                         closePrice: parseFloat(closePrice),
-                        openTime,
-                        closeTime,
+                        openTime: new Date(openTime),
+                        closeTime: new Date(closeTime),
                         profit: parseFloat(profit),
                         commission: parseFloat(commission),
                         swap: parseFloat(swap),
                         total: parseFloat(profit) + parseFloat(commission) + parseFloat(swap)
-                    });
+                    };
+                    
+                    // Only add if not already in history
+                    if (!tradeHistory.find(t => t.ticket === trade.ticket)) {
+                        tradeHistory.push(trade);
+                    }
                 }
             });
         }
 
-        // Update last update and broadcast to clients
-        lastUpdate = { account, positions, history };
+        // Update last update
+        lastUpdate = { account, positions };
         eaConnected = true;
         lastEAUpdate = Date.now();
 
@@ -209,6 +219,97 @@ app.post('/api/ea-data', (req, res) => {
         console.error('Error processing EA data:', error);
         res.status(500).json({ error: 'Error processing data' });
     }
+});
+
+// Get trade history with filters
+app.get('/api/trade-history', (req, res) => {
+    try {
+        const { period } = req.query;
+        let filteredHistory = [...tradeHistory];
+        
+        const now = new Date();
+        switch (period) {
+            case 'today':
+                filteredHistory = tradeHistory.filter(trade => 
+                    trade.closeTime.toDateString() === now.toDateString()
+                );
+                break;
+            case 'last3days':
+                const threeDaysAgo = new Date(now - 3 * 24 * 60 * 60 * 1000);
+                filteredHistory = tradeHistory.filter(trade => 
+                    trade.closeTime >= threeDaysAgo
+                );
+                break;
+            case 'lastWeek':
+                const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+                filteredHistory = tradeHistory.filter(trade => 
+                    trade.closeTime >= weekAgo
+                );
+                break;
+            case 'lastMonth':
+                const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+                filteredHistory = tradeHistory.filter(trade => 
+                    trade.closeTime >= monthAgo
+                );
+                break;
+            case 'last3Months':
+                const threeMonthsAgo = new Date(now - 90 * 24 * 60 * 60 * 1000);
+                filteredHistory = tradeHistory.filter(trade => 
+                    trade.closeTime >= threeMonthsAgo
+                );
+                break;
+            case 'last6Months':
+                const sixMonthsAgo = new Date(now - 180 * 24 * 60 * 60 * 1000);
+                filteredHistory = tradeHistory.filter(trade => 
+                    trade.closeTime >= sixMonthsAgo
+                );
+                break;
+            case 'custom':
+                const { startDate, endDate } = req.query;
+                if (startDate && endDate) {
+                    filteredHistory = tradeHistory.filter(trade => 
+                        trade.closeTime >= new Date(startDate) && 
+                        trade.closeTime <= new Date(endDate)
+                    );
+                }
+                break;
+        }
+        
+        res.json(filteredHistory.sort((a, b) => b.closeTime - a.closeTime));
+    } catch (error) {
+        console.error('Error fetching trade history:', error);
+        res.status(500).json({ error: 'Error fetching trade history' });
+    }
+});
+
+// Get trade history with filters and send request to EA
+app.get('/api/trade-history/ea', (req, res) => {
+    const { period, startDate, endDate } = req.query;
+    const requestId = Date.now().toString();
+    
+    // Store the response object to resolve later
+    historyRequests.set(requestId, res);
+    
+    // Send command to EA
+    let command = `GET_HISTORY|${period}`;
+    if (period === 'custom') {
+        command += `|${startDate}|${endDate}`;
+    }
+    
+    // Send the command to all connected clients
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(`COMMAND|${command}`);
+        }
+    });
+    
+    // Set timeout to clean up if no response
+    setTimeout(() => {
+        if (historyRequests.has(requestId)) {
+            historyRequests.delete(requestId);
+            res.status(408).json({ error: 'Request timeout' });
+        }
+    }, 30000); // 30 second timeout
 });
 
 // Trade command handler
@@ -309,13 +410,28 @@ wss.on('connection', (ws) => {
     // Handle incoming messages from clients
     ws.on('message', (message) => {
         try {
-            const data = JSON.parse(message);
-            console.log('Received WebSocket message:', data);
+            const data = message.toString();
+            
+            if (data.startsWith('HISTORY|')) {
+                const historyData = JSON.parse(data.substring(8));
+                
+                // Find the oldest pending request and resolve it
+                const [oldestId] = historyRequests.keys();
+                if (oldestId) {
+                    const res = historyRequests.get(oldestId);
+                    historyRequests.delete(oldestId);
+                    res.json(historyData);
+                }
+                return;
+            }
 
-            if (data.type === 'command') {
+            const dataJson = JSON.parse(data);
+            console.log('Received WebSocket message:', dataJson);
+
+            if (dataJson.type === 'command') {
                 // Add command to pending queue
-                pendingCommands.push(data.data);
-                console.log('Added command to queue:', data.data);
+                pendingCommands.push(dataJson.data);
+                console.log('Added command to queue:', dataJson.data);
             }
         } catch (error) {
             console.error('Error processing WebSocket message:', error);

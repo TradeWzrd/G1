@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { LineChart, XAxis, YAxis, Tooltip, Line, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { TrendingUp, TrendingDown, X, DollarSign, Wallet, Activity, RefreshCw, BarChart2, Clock } from 'lucide-react';
 
@@ -453,20 +453,47 @@ const WebTerminal = () => {
         );
     };
 
-    const TradeHistory = ({ history }) => {
+    const TradeHistory = () => {
+        const [history, setHistory] = useState([]);
+        const [period, setPeriod] = useState('today');
+        const [customRange, setCustomRange] = useState({ startDate: '', endDate: '' });
+        const [loading, setLoading] = useState(false);
         const [sortField, setSortField] = useState('closeTime');
         const [sortDirection, setSortDirection] = useState('desc');
         
-        const sortedHistory = history?.sort((a, b) => {
-            if (sortField === 'closeTime') {
-                return sortDirection === 'desc' 
-                    ? new Date(b.closeTime) - new Date(a.closeTime)
-                    : new Date(a.closeTime) - new Date(b.closeTime);
+        const fetchHistory = async () => {
+            setLoading(true);
+            try {
+                let url = `https://g1-back.onrender.com/api/trade-history/ea?period=${period}`;
+                if (period === 'custom') {
+                    url += `&startDate=${customRange.startDate}&endDate=${customRange.endDate}`;
+                }
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                setHistory(data);
+            } catch (error) {
+                console.error('Error fetching trade history:', error);
+                setError('Failed to fetch trade history. Please try again.');
+            } finally {
+                setLoading(false);
             }
-            return sortDirection === 'desc' 
-                ? b[sortField] - a[sortField]
-                : a[sortField] - b[sortField];
-        });
+        };
+
+        const sortedHistory = useMemo(() => {
+            return [...history].sort((a, b) => {
+                if (sortField === 'closeTime') {
+                    return sortDirection === 'desc' 
+                        ? new Date(b.closeTime) - new Date(a.closeTime)
+                        : new Date(a.closeTime) - new Date(b.closeTime);
+                }
+                return sortDirection === 'desc' 
+                    ? b[sortField] - a[sortField]
+                    : a[sortField] - b[sortField];
+            });
+        }, [history, sortField, sortDirection]);
 
         const handleSort = (field) => {
             if (field === sortField) {
@@ -494,92 +521,141 @@ const WebTerminal = () => {
         };
 
         return (
-            <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-700">
-                    <thead>
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
-                                onClick={() => handleSort('ticket')}>
-                                Ticket
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Symbol
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Type
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
-                                onClick={() => handleSort('lots')}>
-                                Volume
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
-                                onClick={() => handleSort('openPrice')}>
-                                Open Price
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
-                                onClick={() => handleSort('closePrice')}>
-                                Close Price
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
-                                onClick={() => handleSort('closeTime')}>
-                                Close Time
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
-                                onClick={() => handleSort('profit')}>
-                                Profit
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Commission
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Swap
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
-                                onClick={() => handleSort('total')}>
-                                Total
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-700">
-                        {sortedHistory?.map((trade) => (
-                            <tr key={`${trade.ticket}-${trade.closeTime}`}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                    {trade.ticket}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                    {trade.symbol}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                    {getOrderTypeString(trade.type)}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                    {trade.lots.toFixed(2)}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                    {trade.openPrice.toFixed(5)}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                    {trade.closePrice.toFixed(5)}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                    {formatDateTime(trade.closeTime)}
-                                </td>
-                                <td className={`px-6 py-4 whitespace-nowrap text-sm ${trade.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                    {trade.profit.toFixed(2)}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                    {trade.commission.toFixed(2)}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                    {trade.swap.toFixed(2)}
-                                </td>
-                                <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${trade.total >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                    {trade.total.toFixed(2)}
-                                </td>
+            <div className="space-y-4">
+                <div className="flex items-center space-x-4">
+                    <select 
+                        className="bg-[#1a1f2e] text-white border border-[#2a3441] rounded px-3 py-2"
+                        value={period}
+                        onChange={(e) => setPeriod(e.target.value)}
+                    >
+                        <option value="all">All History</option>
+                        <option value="today">Today</option>
+                        <option value="last3days">Last 3 Days</option>
+                        <option value="lastWeek">Last Week</option>
+                        <option value="lastMonth">Last Month</option>
+                        <option value="last3Months">Last 3 Months</option>
+                        <option value="last6Months">Last 6 Months</option>
+                        <option value="custom">Custom Period</option>
+                    </select>
+
+                    {period === 'custom' && (
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="date"
+                                className="bg-[#1a1f2e] text-white border border-[#2a3441] rounded px-3 py-2"
+                                value={customRange.startDate}
+                                onChange={(e) => setCustomRange(prev => ({ ...prev, startDate: e.target.value }))}
+                            />
+                            <span className="text-white">to</span>
+                            <input
+                                type="date"
+                                className="bg-[#1a1f2e] text-white border border-[#2a3441] rounded px-3 py-2"
+                                value={customRange.endDate}
+                                onChange={(e) => setCustomRange(prev => ({ ...prev, endDate: e.target.value }))}
+                            />
+                        </div>
+                    )}
+
+                    <button
+                        className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded flex items-center space-x-2"
+                        onClick={fetchHistory}
+                        disabled={loading}
+                    >
+                        {loading ? (
+                            <span className="animate-spin">⟳</span>
+                        ) : (
+                            <span>Fetch History</span>
+                        )}
+                    </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-700">
+                        <thead>
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                                    onClick={() => handleSort('ticket')}>
+                                    Ticket
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                    Symbol
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                    Type
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                                    onClick={() => handleSort('lots')}>
+                                    Volume
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                                    onClick={() => handleSort('openPrice')}>
+                                    Open Price
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                                    onClick={() => handleSort('closePrice')}>
+                                    Close Price
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                                    onClick={() => handleSort('closeTime')}>
+                                    Close Time
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                                    onClick={() => handleSort('profit')}>
+                                    Profit
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                    Commission
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                    Swap
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                                    onClick={() => handleSort('total')}>
+                                    Total
+                                </th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-gray-700">
+                            {sortedHistory.map((trade) => (
+                                <tr key={`${trade.ticket}-${trade.closeTime}`}>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                        {trade.ticket}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                        {trade.symbol}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                        {getOrderTypeString(trade.type)}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                        {trade.lots.toFixed(2)}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                        {trade.openPrice.toFixed(5)}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                        {trade.closePrice.toFixed(5)}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                        {formatDateTime(trade.closeTime)}
+                                    </td>
+                                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${trade.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        {trade.profit.toFixed(2)}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                        {trade.commission.toFixed(2)}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                        {trade.swap.toFixed(2)}
+                                    </td>
+                                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${trade.total >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        {trade.total.toFixed(2)}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         );
     };
@@ -846,7 +922,7 @@ const WebTerminal = () => {
                                 <p className="text-sm text-gray-400">View your past trades</p>
                             </div>
                         </div>
-                        <TradeHistory history={lastUpdate?.history || []} />
+                        <TradeHistory />
                     </div>
                 </div>
             </div>

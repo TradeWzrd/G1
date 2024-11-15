@@ -186,8 +186,6 @@ void ProcessCommand(string cmd)
             Print("Order executed successfully - Ticket: ", ticket);
         }
     }
-// Inside ProcessCommand function, add this case:
-
     else if(StringFind(action, "CLOSEALL") == 0) {
         Print("Executing Close All command");
         int type = -1;
@@ -371,6 +369,7 @@ string GetJsonValue(string json, string key)
     
     return "";
 }
+
 //+------------------------------------------------------------------+
 //| Send update to server                                             |
 //+------------------------------------------------------------------+
@@ -411,6 +410,7 @@ void SendUpdate()
         lastError = "";
     }
 }
+
 //+------------------------------------------------------------------+
 //| Timer function                                                    |
 //+------------------------------------------------------------------+
@@ -446,4 +446,128 @@ void OnTick()
     status += "Connected: " + (isConnected ? "Yes" : "No") + "\n";
     if(lastError != "") status += "Error: " + lastError + "\n";
     Comment(status);
+}
+
+//+------------------------------------------------------------------+
+//| Chart event function                                              |
+//+------------------------------------------------------------------+
+void OnChartEvent(const int id, const long& lparam, const double& dparam, const string& sparam)
+{
+    if(id == CHARTEVENT_CUSTOM+1) {
+        // Handle incoming WebSocket commands
+        if(StringFind(sparam, "COMMAND|") == 0) {
+            string command = StringSubstr(sparam, 8);
+            
+            if(StringFind(command, "GET_HISTORY|") == 0) {
+                string params = StringSubstr(command, 11);
+                string period = "";
+                datetime startDate = 0;
+                datetime endDate = 0;
+                
+                // Parse period and dates from params
+                string parts[];
+                int split = StringSplit(params, '|', parts);
+                if(split >= 1) period = parts[0];
+                if(split >= 3) {
+                    startDate = StringToTime(parts[1]);
+                    endDate = StringToTime(parts[2]);
+                }
+                
+                string historyData = GetTradeHistory(period, startDate, endDate);
+                
+                // Send history data using WebRequest
+                string headers = "Content-Type: text/plain\r\n";
+                if(StringLen(ApiKey) > 0) {
+                    headers += "X-API-Key: " + ApiKey + "\r\n";
+                }
+                
+                char post[];
+                StringToCharArray(historyData, post);
+                
+                char result[];
+                string resultHeaders;
+                
+                int res = WebRequest(
+                    "POST",
+                    ServerURL + "/api/mt4/history",
+                    headers,
+                    5000,
+                    post,
+                    result,
+                    resultHeaders
+                );
+                
+                if(res == -1) {
+                    Print("Error sending history data: ", GetLastError());
+                }
+                
+                return;
+            }
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Get trade history function                                        |
+//+------------------------------------------------------------------+
+string GetTradeHistory(string period, datetime startDate, datetime endDate)
+{
+    datetime filterStart = 0;
+    datetime filterEnd = TimeCurrent();
+    
+    // Calculate filter dates based on period
+    if(period == "today") {
+        filterStart = StringToTime(TimeToString(TimeCurrent(), TIME_DATE));
+    }
+    else if(period == "last3days") {
+        filterStart = TimeCurrent() - 3 * 24 * 60 * 60;
+    }
+    else if(period == "lastWeek") {
+        filterStart = TimeCurrent() - 7 * 24 * 60 * 60;
+    }
+    else if(period == "lastMonth") {
+        filterStart = TimeCurrent() - 30 * 24 * 60 * 60;
+    }
+    else if(period == "last3Months") {
+        filterStart = TimeCurrent() - 90 * 24 * 60 * 60;
+    }
+    else if(period == "last6Months") {
+        filterStart = TimeCurrent() - 180 * 24 * 60 * 60;
+    }
+    else if(period == "custom" && startDate > 0 && endDate > 0) {
+        filterStart = startDate;
+        filterEnd = endDate;
+    }
+    
+    string history = "HISTORY|[";
+    bool firstTrade = true;
+    
+    for(int i = OrdersHistoryTotal() - 1; i >= 0; i--) {
+        if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) {
+            datetime closeTime = OrderCloseTime();
+            
+            // Skip if outside filter range
+            if(closeTime < filterStart || closeTime > filterEnd) continue;
+            
+            if(!firstTrade) history += ",";
+            firstTrade = false;
+            
+            history += "{";
+            history += "\"ticket\":" + IntegerToString(OrderTicket()) + ",";
+            history += "\"type\":" + IntegerToString(OrderType()) + ",";
+            history += "\"lots\":" + DoubleToString(OrderLots(), 2) + ",";
+            history += "\"symbol\":\"" + OrderSymbol() + "\",";
+            history += "\"openPrice\":" + DoubleToString(OrderOpenPrice(), 5) + ",";
+            history += "\"closePrice\":" + DoubleToString(OrderClosePrice(), 5) + ",";
+            history += "\"closeTime\":\"" + TimeToString(OrderCloseTime(), TIME_DATE|TIME_SECONDS) + "\",";
+            history += "\"profit\":" + DoubleToString(OrderProfit(), 2) + ",";
+            history += "\"commission\":" + DoubleToString(OrderCommission(), 2) + ",";
+            history += "\"swap\":" + DoubleToString(OrderSwap(), 2) + ",";
+            history += "\"total\":" + DoubleToString(OrderProfit() + OrderCommission() + OrderSwap(), 2);
+            history += "}";
+        }
+    }
+    
+    history += "]";
+    return history;
 }
