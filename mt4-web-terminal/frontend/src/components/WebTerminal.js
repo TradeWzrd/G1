@@ -7,11 +7,11 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
     const [positions, setPositions] = useState(propPositions);
     const [loading, setLoading] = useState(false);
     const [newOrder, setNewOrder] = useState({
-        symbol: 'XAUUSDm',
-        lots: 0.01,
+        symbol: '',
+        lots: '0.01',
         stopLoss: '',
         takeProfit: '',
-        comment: 'Web Terminal'
+        comment: ''
     });
 
     // Update accountData when prop changes
@@ -29,25 +29,21 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
     // Send trade command
     const sendTradeCommand = async (action, ticket = null) => {
         if (!connected || !eaConnected) {
-            toast.error('Not connected to trading server');
+            toast.error('Not connected to server or MT4');
             return;
         }
 
         setLoading(true);
         try {
-            const params = {
-                risk: parseFloat(newOrder.lots)
-            };
-
-            if (newOrder.stopLoss) params.sl = parseFloat(newOrder.stopLoss);
-            if (newOrder.takeProfit) params.tp = parseFloat(newOrder.takeProfit);
-            if (newOrder.comment) params.comment = newOrder.comment;
-            if (ticket) params.ticket = ticket;
-
             const command = {
                 action,
-                symbol: newOrder.symbol,
-                params
+                symbol: ticket ? ticket.toString() : newOrder.symbol,
+                params: ticket ? {} : {
+                    lots: parseFloat(newOrder.lots) || 0.01,
+                    sl: parseFloat(newOrder.stopLoss) || 0,
+                    tp: parseFloat(newOrder.takeProfit) || 0,
+                    comment: newOrder.comment || 'Web Terminal'
+                }
             };
 
             const response = await fetch('https://g1-back.onrender.com/api/trade', {
@@ -58,15 +54,26 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
                 body: JSON.stringify(command)
             });
 
-            const data = await response.json();
-            if (data.status === 'command_sent') {
-                toast.success(`${action.toUpperCase()} order sent successfully`);
-            } else {
-                toast.error('Failed to send order: ' + (data.error || 'Unknown error'));
+            if (!response.ok) {
+                const error = await response.text();
+                throw new Error(error);
+            }
+
+            toast.success(`${action.toUpperCase()} order sent successfully`);
+            
+            // Clear form after successful order
+            if (!ticket) {
+                setNewOrder({
+                    symbol: '',
+                    lots: '0.01',
+                    stopLoss: '',
+                    takeProfit: '',
+                    comment: ''
+                });
             }
         } catch (error) {
-            console.error('Error sending trade command:', error);
-            toast.error('Error sending trade command: ' + error.message);
+            console.error('Trade error:', error);
+            toast.error(`Failed to send ${action} order: ${error.message}`);
         } finally {
             setLoading(false);
         }
@@ -101,31 +108,30 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
             </div>
 
             {/* Account Information */}
-            {accountData && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    <div className="bg-[#111827] p-3 rounded-lg border border-[#2a3441]">
-                        <div className="text-sm text-gray-400">Balance</div>
-                        <div className="font-semibold text-white">${(accountData.balance || 0).toFixed(2)}</div>
-                    </div>
-                    <div className="bg-[#111827] p-3 rounded-lg border border-[#2a3441]">
-                        <div className="text-sm text-gray-400">Equity</div>
-                        <div className="font-semibold text-white">${(accountData.equity || 0).toFixed(2)}</div>
-                    </div>
-                    <div className="bg-[#111827] p-3 rounded-lg border border-[#2a3441]">
-                        <div className="text-sm text-gray-400">Margin</div>
-                        <div className="font-semibold text-white">${(accountData.margin || 0).toFixed(2)}</div>
-                    </div>
-                    <div className="bg-[#111827] p-3 rounded-lg border border-[#2a3441]">
-                        <div className="text-sm text-gray-400">Free Margin</div>
-                        <div className="font-semibold text-white">${(accountData.freeMargin || 0).toFixed(2)}</div>
-                    </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-gray-800 p-4 rounded-lg">
+                    <div className="text-gray-400 text-sm">Balance</div>
+                    <div className="text-lg font-semibold">${(accountData?.balance || 0).toFixed(2)}</div>
                 </div>
-            )}
+                <div className="bg-gray-800 p-4 rounded-lg">
+                    <div className="text-gray-400 text-sm">Equity</div>
+                    <div className="text-lg font-semibold">${(accountData?.equity || 0).toFixed(2)}</div>
+                </div>
+                <div className="bg-gray-800 p-4 rounded-lg">
+                    <div className="text-gray-400 text-sm">Margin</div>
+                    <div className="text-lg font-semibold">${(accountData?.margin || 0).toFixed(2)}</div>
+                </div>
+                <div className="bg-gray-800 p-4 rounded-lg">
+                    <div className="text-gray-400 text-sm">Free Margin</div>
+                    <div className="text-lg font-semibold">${(accountData?.freeMargin || 0).toFixed(2)}</div>
+                </div>
+            </div>
 
             {/* Trading Interface */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <h2 className="text-xl font-semibold mb-4 text-white">New Order</h2>
+                {/* Order Form */}
+                <div className="bg-gray-800 p-4 rounded-lg">
+                    <h3 className="text-lg font-semibold mb-4">New Order</h3>
                     <div className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-300">Symbol</label>
@@ -134,68 +140,64 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
                                 name="symbol"
                                 value={newOrder.symbol}
                                 onChange={handleInputChange}
-                                className="mt-1 block w-full rounded-lg border-[#2a3441] bg-[#111827] text-white px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="e.g., EURUSD"
+                                className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
                             />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-300">Lots</label>
                             <input
                                 type="number"
-                                step="0.01"
                                 name="lots"
+                                step="0.01"
+                                min="0.01"
                                 value={newOrder.lots}
                                 onChange={handleInputChange}
-                                className="mt-1 block w-full rounded-lg border-[#2a3441] bg-[#111827] text-white px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                                className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
                             />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-300">Stop Loss</label>
                             <input
                                 type="number"
-                                step="0.01"
                                 name="stopLoss"
+                                step="0.00001"
                                 value={newOrder.stopLoss}
                                 onChange={handleInputChange}
-                                className="mt-1 block w-full rounded-lg border-[#2a3441] bg-[#111827] text-white px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                                className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
                             />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-300">Take Profit</label>
                             <input
                                 type="number"
-                                step="0.01"
                                 name="takeProfit"
+                                step="0.00001"
                                 value={newOrder.takeProfit}
                                 onChange={handleInputChange}
-                                className="mt-1 block w-full rounded-lg border-[#2a3441] bg-[#111827] text-white px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                                className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
                             />
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-300">Comment</label>
-                            <input
-                                type="text"
-                                name="comment"
-                                value={newOrder.comment}
-                                onChange={handleInputChange}
-                                className="mt-1 block w-full rounded-lg border-[#2a3441] bg-[#111827] text-white px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                            />
-                        </div>
-                        <div className="flex space-x-4">
+                        <div className="flex gap-4">
                             <button
                                 onClick={() => sendTradeCommand('buy')}
-                                className={`flex-1 ${loading ? 'bg-gray-600' : 'bg-green-500 hover:bg-green-600'} 
-                                    text-white px-4 py-2 rounded-lg transition-colors duration-200
-                                    disabled:opacity-50 disabled:cursor-not-allowed`}
-                                disabled={!connected || !eaConnected || loading}
+                                disabled={!connected || !eaConnected || loading || !newOrder.symbol}
+                                className={`flex-1 py-2 px-4 rounded-md ${
+                                    !connected || !eaConnected || loading || !newOrder.symbol
+                                        ? 'bg-gray-600 cursor-not-allowed'
+                                        : 'bg-green-600 hover:bg-green-700'
+                                }`}
                             >
                                 {loading ? 'Sending...' : 'Buy'}
                             </button>
                             <button
                                 onClick={() => sendTradeCommand('sell')}
-                                className={`flex-1 ${loading ? 'bg-gray-600' : 'bg-red-500 hover:bg-red-600'}
-                                    text-white px-4 py-2 rounded-lg transition-colors duration-200
-                                    disabled:opacity-50 disabled:cursor-not-allowed`}
-                                disabled={!connected || !eaConnected || loading}
+                                disabled={!connected || !eaConnected || loading || !newOrder.symbol}
+                                className={`flex-1 py-2 px-4 rounded-md ${
+                                    !connected || !eaConnected || loading || !newOrder.symbol
+                                        ? 'bg-gray-600 cursor-not-allowed'
+                                        : 'bg-red-600 hover:bg-red-700'
+                                }`}
                             >
                                 {loading ? 'Sending...' : 'Sell'}
                             </button>
@@ -203,50 +205,58 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
                     </div>
                 </div>
 
-                {/* Open Positions */}
-                <div>
-                    <h2 className="text-xl font-semibold mb-4 text-white">Open Positions</h2>
+                {/* Positions Table */}
+                <div className="bg-gray-800 p-4 rounded-lg">
+                    <h3 className="text-lg font-semibold mb-4">Open Positions</h3>
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-[#2a3441]">
-                            <thead className="bg-[#111827]">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ticket</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Symbol</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Type</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Lots</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Price</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Profit</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
+                        <table className="min-w-full">
+                            <thead>
+                                <tr className="text-left text-gray-400 text-sm">
+                                    <th className="py-2">Ticket</th>
+                                    <th className="py-2">Symbol</th>
+                                    <th className="py-2">Type</th>
+                                    <th className="py-2">Lots</th>
+                                    <th className="py-2">Price</th>
+                                    <th className="py-2">Profit</th>
+                                    <th className="py-2"></th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-[#1a1f2e] divide-y divide-[#2a3441]">
-                                {positions.map((position) => (
-                                    <tr key={position.ticket}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{position.ticket}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{position.symbol}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                            <span className={position.type === 0 ? 'text-green-400' : 'text-red-400'}>
-                                                {position.type === 0 ? 'BUY' : 'SELL'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{(position.lots || 0).toFixed(2)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{(position.openPrice || 0).toFixed(5)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                            <span className={(position.profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}>
-                                                {(position.profit || 0).toFixed(2)}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                            <button
-                                                onClick={() => sendTradeCommand('close', position.ticket)}
-                                                className="text-red-400 hover:text-red-300 transition-colors duration-200"
-                                                disabled={loading}
-                                            >
-                                                Close
-                                            </button>
+                            <tbody>
+                                {positions && positions.length > 0 ? (
+                                    positions.map((position) => (
+                                        <tr key={position.ticket} className="border-t border-gray-700">
+                                            <td className="py-2">{position.ticket}</td>
+                                            <td className="py-2">{position.symbol}</td>
+                                            <td className="py-2">
+                                                <span className={position.type === 0 ? 'text-green-400' : 'text-red-400'}>
+                                                    {position.type === 0 ? 'BUY' : 'SELL'}
+                                                </span>
+                                            </td>
+                                            <td className="py-2">{(position.lots || 0).toFixed(2)}</td>
+                                            <td className="py-2">{(position.openPrice || 0).toFixed(5)}</td>
+                                            <td className="py-2">
+                                                <span className={(position.profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}>
+                                                    {(position.profit || 0).toFixed(2)}
+                                                </span>
+                                            </td>
+                                            <td className="py-2">
+                                                <button
+                                                    onClick={() => sendTradeCommand('close', position.ticket)}
+                                                    disabled={!connected || !eaConnected || loading}
+                                                    className="text-red-400 hover:text-red-300"
+                                                >
+                                                    Close
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="7" className="py-4 text-center text-gray-400">
+                                            No open positions
                                         </td>
                                     </tr>
-                                ))}
+                                )}
                             </tbody>
                         </table>
                     </div>

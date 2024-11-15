@@ -10,10 +10,11 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const webClients = new Set();
 
-// Store latest account data
+// Store latest account data and pending commands
 let latestAccountData = null;
 let eaConnected = false;
 let lastEAUpdate = Date.now();
+let pendingCommands = [];
 
 // Middleware
 app.use(express.text());
@@ -75,8 +76,8 @@ function parseData(dataString) {
     }
 }
 
-// Broadcast to all web clients
-function broadcast(data) {
+// Broadcast to web clients
+function broadcastToWeb(data) {
     webClients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify(data));
@@ -98,8 +99,8 @@ app.post('/api/mt4/update', (req, res) => {
     lastEAUpdate = Date.now();
     eaConnected = true;
 
-    // Broadcast update to all web clients
-    broadcast({
+    // Broadcast update to web clients
+    broadcastToWeb({
         type: 'update',
         data,
         connected: true,
@@ -108,6 +109,16 @@ app.post('/api/mt4/update', (req, res) => {
     });
 
     res.send('OK');
+});
+
+// EA command polling endpoint
+app.get('/api/mt4/commands', (req, res) => {
+    if (pendingCommands.length > 0) {
+        const command = pendingCommands.shift(); // Get and remove first command
+        res.json(command);
+    } else {
+        res.json(''); // No commands pending
+    }
 });
 
 // Trade command endpoint
@@ -123,31 +134,22 @@ app.post('/api/trade', (req, res) => {
         return res.status(400).json({ error: 'Missing required parameters' });
     }
 
-    // Format command in PineConnector style
+    // Format command
     let command = `${action},${symbol}`;
-    
-    // Add parameters if present
     if (params) {
         Object.entries(params).forEach(([key, value]) => {
             command += `,${key}=${value}`;
         });
     }
 
-    // Broadcast command to all clients
-    broadcast({
-        type: 'command',
-        data: command,
-        timestamp: Date.now()
-    });
-
-    res.json({ status: 'command_sent', command });
+    // Add command to pending queue
+    pendingCommands.push(command);
+    res.json({ status: 'command_queued', command });
 });
 
-// WebSocket connection handler
-wss.on('connection', (ws, req) => {
-    console.log('New WebSocket connection');
-    
-    // Add to web clients
+// WebSocket connection handler for web clients
+wss.on('connection', (ws) => {
+    console.log('New web client connected');
     webClients.add(ws);
 
     // Send initial data if available
@@ -161,7 +163,7 @@ wss.on('connection', (ws, req) => {
         }));
     }
 
-    // Send current EA status
+    // Send current status
     ws.send(JSON.stringify({
         type: 'status',
         connected: true,
@@ -171,7 +173,7 @@ wss.on('connection', (ws, req) => {
 
     ws.on('close', () => {
         webClients.delete(ws);
-        console.log('Client disconnected');
+        console.log('Web client disconnected');
     });
 });
 
@@ -183,9 +185,8 @@ setInterval(() => {
     if (now - lastEAUpdate > 10000) {
         eaConnected = false;
         
-        // Only broadcast if the status changed
-        if (wasConnected !== eaConnected) {
-            broadcast({
+        if (wasConnected) {
+            broadcastToWeb({
                 type: 'status',
                 connected: true,
                 eaConnected: false,

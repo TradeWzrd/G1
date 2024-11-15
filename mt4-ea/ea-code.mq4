@@ -14,36 +14,85 @@ extern int      UpdateInterval = 3;                         // Update interval i
 // Global variables
 bool isConnected = false;
 string lastError = "";
+datetime lastUpdateTime = 0;
 
 //+------------------------------------------------------------------+
 //| Send data to server                                                |
 //+------------------------------------------------------------------+
-void SendToServer(string data) {
+bool SendToServer(string data) {
     string url = ServerURL + "/api/mt4/update";
     char post[];
     char result[];
-    string headers = "Content-Type: text/plain\r\n";
+    string resultHeaders;
+    string cookie=NULL;
     
     StringToCharArray(data, post);
     
+    ResetLastError();
     int res = WebRequest(
-        "POST",
-        url,
-        headers,
-        5000,
-        post,
-        result,
-        lastError
+        "POST",                // Method
+        url,                   // URL
+        cookie,                // Cookie
+        NULL,                  // Referer
+        5000,                  // Timeout
+        post,                  // Post data
+        ArraySize(post),       // Data size
+        result,                // Result
+        resultHeaders          // Response headers
     );
     
     if(res == -1) {
         int error = GetLastError();
         Print("Error in WebRequest: ", error);
         isConnected = false;
+        return false;
     } else {
         isConnected = true;
-        string response = CharArrayToString(result);
-        ProcessServerResponse(response);
+        lastUpdateTime = TimeLocal();
+        return true;
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Check for trade commands                                           |
+//+------------------------------------------------------------------+
+void CheckTradeCommands() {
+    string url = ServerURL + "/api/mt4/commands";
+    char result[];
+    string resultHeaders;
+    char empty[];
+    string cookie=NULL;
+    
+    ArrayResize(empty, 1);
+    empty[0] = 0;
+    
+    ResetLastError();
+    int res = WebRequest(
+        "GET",                 // Method
+        url,                   // URL
+        cookie,                // Cookie
+        NULL,                  // Referer
+        5000,                  // Timeout
+        empty,                 // Data
+        ArraySize(empty),      // Data size
+        result,                // Result
+        resultHeaders          // Response headers
+    );
+    
+    if(res != -1) {
+        string commands = CharArrayToString(result);
+        // Skip empty responses
+        if(StringLen(commands) > 0 && StringFind(commands, "<!DOCTYPE") == -1) {
+            string trimmed = StringTrimRight(StringTrimLeft(commands));
+            // Skip empty JSON responses
+            if(trimmed != "\"\"" && trimmed != "") {
+                // Remove quotes if present
+                if(StringGetChar(trimmed, 0) == 34) { // 34 is ASCII for "
+                    trimmed = StringSubstr(trimmed, 1, StringLen(trimmed) - 2);
+                }
+                ProcessCommand(trimmed);
+            }
+        }
     }
 }
 
@@ -54,20 +103,19 @@ string CreateUpdateString() {
     string accountInfo = StringFormat("ACCOUNT|%.2f;%.2f;%.2f;%.2f",
         AccountBalance(),
         AccountEquity(),
-        AccountProfit(),
+        AccountMargin(),
         AccountFreeMargin()
     );
     
     string positions = "|POSITIONS|";
     
-    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+    for(int i = 0; i < OrdersTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderMagicNumber() != MAGICMA) continue;
         
-        positions += StringFormat("%d,%s,%s,%.2f,%.4f,%.4f,%.4f,%.2f,%.2f,%s;",
+        positions += StringFormat("%d,%s,%d,%.2f,%.5f,%.5f,%.5f,%.2f,%.2f,%s;",
             OrderTicket(),
             OrderSymbol(),
-            OrderType() == OP_BUY ? "buy" : "sell",
+            OrderType(),
             OrderLots(),
             OrderOpenPrice(),
             OrderStopLoss(),
@@ -82,18 +130,22 @@ string CreateUpdateString() {
 }
 
 //+------------------------------------------------------------------+
-//| Process command from server                                        |
+//| Process command                                                    |
 //+------------------------------------------------------------------+
 void ProcessCommand(string command) {
+    Print("Processing command: ", command);
     string parts[];
     StringSplit(command, ',', parts);
     
-    if(ArraySize(parts) < 2) return;
+    if(ArraySize(parts) < 2) {
+        Print("Invalid command format");
+        return;
+    }
     
     string action = parts[0];
     string symbol = parts[1];
     
-    double risk = 0.01;     // Default risk
+    double lots = 0.01;     // Default lots
     double sl = 0;          // Default stop loss
     double tp = 0;          // Default take profit
     string comment = "Web Terminal";
@@ -107,18 +159,144 @@ void ProcessCommand(string command) {
         string paramName = paramParts[0];
         string paramValue = paramParts[1];
         
-        if(paramName == "risk") risk = StringToDouble(paramValue);
+        if(paramName == "lots") lots = StringToDouble(paramValue);
         else if(paramName == "sl") sl = StringToDouble(paramValue);
         else if(paramName == "tp") tp = StringToDouble(paramValue);
         else if(paramName == "comment") comment = paramValue;
     }
     
+    Print("Action: ", action, ", Symbol: ", symbol, ", Lots: ", lots);
+    
     // Execute command
-    if(action == "buy") OpenBuyOrder(symbol, risk, sl, tp, comment);
-    else if(action == "sell") OpenSellOrder(symbol, risk, sl, tp, comment);
-    else if(action == "close") CloseTrade(StringToInteger(symbol));
-    else if(action == "modify") ModifyTrade(StringToInteger(symbol), sl, tp);
-    else if(action == "delete") DeleteTrade(StringToInteger(symbol));
+    if(action == "buy") {
+        int ticket = OrderSend(symbol, OP_BUY, lots, MarketInfo(symbol, MODE_ASK), 3, sl, tp, comment, MAGICMA);
+        if(ticket < 0) Print("Error opening BUY order: ", GetLastError());
+        else Print("BUY order opened: Ticket=", ticket);
+    }
+    else if(action == "sell") {
+        int ticket = OrderSend(symbol, OP_SELL, lots, MarketInfo(symbol, MODE_BID), 3, sl, tp, comment, MAGICMA);
+        if(ticket < 0) Print("Error opening SELL order: ", GetLastError());
+        else Print("SELL order opened: Ticket=", ticket);
+    }
+    else if(action == "close") {
+        int ticket = StringToInteger(symbol);
+        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
+            if(OrderType() == OP_BUY) {
+                if(!OrderClose(ticket, OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), 3))
+                    Print("Error closing BUY order: ", GetLastError());
+            }
+            else if(OrderType() == OP_SELL) {
+                if(!OrderClose(ticket, OrderLots(), MarketInfo(OrderSymbol(), MODE_ASK), 3))
+                    Print("Error closing SELL order: ", GetLastError());
+            }
+        }
+    }
+    
+    // Send immediate update after trade execution
+    SendUpdate();
+}
+
+//+------------------------------------------------------------------+
+//| Timer function                                                     |
+//+------------------------------------------------------------------+
+void OnTimer() {
+    SendUpdate();
+    CheckTradeCommands();
+}
+
+//+------------------------------------------------------------------+
+//| Expert initialization function                                     |
+//+------------------------------------------------------------------+
+int OnInit() {
+    // Extract domain from server URL
+    string domain = ServerURL;
+    if(StringFind(domain, "https://") == 0) domain = StringSubstr(domain, 8);
+    else if(StringFind(domain, "http://") == 0) domain = StringSubstr(domain, 7);
+    
+    // Check if WebRequest is allowed
+    string cookie=NULL;
+    char empty[];
+    char result[];
+    string resultHeaders;
+    
+    ArrayResize(empty, 1);
+    empty[0] = 0;
+    
+    ResetLastError();
+    int ret = WebRequest(
+        "GET",                 // Method
+        "https://www.google.com", // URL
+        cookie,                // Cookie
+        NULL,                  // Referer
+        500,                   // Timeout
+        empty,                // Data
+        ArraySize(empty),     // Data size
+        result,               // Result
+        resultHeaders         // Response headers
+    );
+    
+    if(ret == -1) {
+        int err = GetLastError();
+        if(err == 4014) {  // ERR_FUNCTION_NOT_ALLOWED
+            Print("Please enable Allow WebRequest for listed URL in Tools -> Options -> Expert Advisors");
+            Print("Then add these URLs:");
+            Print(domain);
+            MessageBox(
+                "Please enable 'Allow WebRequest for listed URL' in Tools -> Options -> Expert Advisors\n" +
+                "Then add this URL:\n" + 
+                domain + "\n\n" +
+                "After adding the URL, remove and re-add the EA to the chart.",
+                "WebRequest Setup Required",
+                MB_ICONINFORMATION | MB_OK
+            );
+            return(INIT_FAILED);
+        }
+    }
+    
+    EventSetTimer(UpdateInterval);
+    return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                   |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason) {
+    EventKillTimer();
+}
+
+//+------------------------------------------------------------------+
+//| Send regular update                                                |
+//+------------------------------------------------------------------+
+void SendUpdate() {
+    string data = CreateUpdateString();
+    SendToServer(data);
+}
+
+//+------------------------------------------------------------------+
+//| Allow WebRequest for URL                                           |
+//+------------------------------------------------------------------+
+bool AllowWebRequest(string url) {
+    string terminal_data_path = TerminalInfoString(TERMINAL_DATA_PATH);
+    string filename = terminal_data_path + "\\MQL4\\config\\webservers.ini";
+    int handle = FileOpen(filename, FILE_READ|FILE_WRITE|FILE_TXT);
+    
+    if(handle == INVALID_HANDLE) {
+        Print("Error opening webservers.ini");
+        return false;
+    }
+    
+    string content = "";
+    while(!FileIsEnding(handle)) {
+        content += FileReadString(handle) + "\n";
+    }
+    
+    if(StringFind(content, url) < 0) {
+        FileSeek(handle, 0, SEEK_END);
+        FileWriteString(handle, url + "\n");
+    }
+    
+    FileClose(handle);
+    return true;
 }
 
 //+------------------------------------------------------------------+
@@ -247,49 +425,9 @@ string GetTradeHistory(string symbol) {
 //| Process server response                                            |
 //+------------------------------------------------------------------+
 void ProcessServerResponse(string response) {
-    if(StringFind(response, "command") >= 0) {
-        // Extract command from response
-        int start = StringFind(response, "command") + 10;
-        int end = StringFind(response, "\"", start);
-        string command = StringSubstr(response, start, end - start);
-        ProcessCommand(command);
+    if(StringLen(response) > 0) {
+        ProcessCommand(response);
     }
-}
-
-//+------------------------------------------------------------------+
-//| Timer function                                                     |
-//+------------------------------------------------------------------+
-void OnTimer() {
-    static datetime lastUpdate = 0;
-    datetime currentTime = TimeCurrent();
-    
-    if(currentTime - lastUpdate >= UpdateInterval) {
-        SendUpdate();
-        lastUpdate = currentTime;
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Send regular update                                                |
-//+------------------------------------------------------------------+
-void SendUpdate() {
-    string data = CreateUpdateString();
-    SendToServer(data);
-}
-
-//+------------------------------------------------------------------+
-//| Expert initialization function                                     |
-//+------------------------------------------------------------------+
-int OnInit() {
-    EventSetMillisecondTimer(1000);
-    return(INIT_SUCCEEDED);
-}
-
-//+------------------------------------------------------------------+
-//| Expert deinitialization function                                   |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason) {
-    EventKillTimer();
 }
 
 //+------------------------------------------------------------------+
