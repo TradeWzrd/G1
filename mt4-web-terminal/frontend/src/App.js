@@ -7,143 +7,114 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 const App = () => {
-    const [accountData, setAccountData] = useState(null);
-    const [equityHistory, setEquityHistory] = useState([]);
     const [connected, setConnected] = useState(false);
     const [eaConnected, setEAConnected] = useState(false);
-    const [error, setError] = useState(null);
-
-    // WebSocket reference and reconnection settings
+    const [accountData, setAccountData] = useState(null);
+    const [positions, setPositions] = useState([]);
+    const [equityHistory, setEquityHistory] = useState([]);
     const ws = useRef(null);
     const reconnectAttempts = useRef(0);
-    const maxReconnectAttempts = 5;
-    const reconnectDelay = 2000;
-    const reconnectBackoff = 1.5;
 
-    // Connect WebSocket function
-    const connectWebSocket = useCallback(() => {
-        if (ws.current?.readyState === WebSocket.OPEN) {
-            console.log('WebSocket already connected');
-            return;
-        }
-
-        try {
-            ws.current = new WebSocket('wss://g1-back.onrender.com');
+    useEffect(() => {
+        const connectWebSocket = () => {
+            reconnectAttempts.current++;
+            const wsUrl = process.env.REACT_APP_WS_URL || 'wss://g1-back.onrender.com';
+            ws.current = new WebSocket(wsUrl);
 
             ws.current.onopen = () => {
-                console.log('WebSocket Connected');
+                console.log('WebSocket connected');
                 setConnected(true);
-                setError(null);
-                reconnectAttempts.current = 0;
-            };
-
-            ws.current.onclose = (event) => {
-                console.log('WebSocket Disconnected', event.code, event.reason);
-                setConnected(false);
-                setEAConnected(false);
-
-                if (reconnectAttempts.current < maxReconnectAttempts) {
-                    const delay = reconnectDelay * Math.pow(reconnectBackoff, reconnectAttempts.current);
-                    console.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
-                    
-                    setTimeout(() => {
-                        reconnectAttempts.current++;
-                        connectWebSocket();
-                    }, delay);
-                } else {
-                    setError('Unable to establish connection. Please refresh the page.');
+                if (reconnectAttempts.current === 1) {
+                    // toast.success('Connected to server');
                 }
             };
 
+            ws.current.onclose = () => {
+                console.log('WebSocket disconnected');
+                setConnected(false);
+                setEAConnected(false);
+                if (connected) {
+                    // toast.error('Disconnected from server');
+                }
+                setTimeout(connectWebSocket, 5000);
+            };
+
             ws.current.onerror = (error) => {
-                console.error('WebSocket Error:', error);
-                setError('Connection error occurred');
+                console.error('WebSocket error:', error);
             };
 
             ws.current.onmessage = (event) => {
                 try {
-                    const data = JSON.parse(event.data);
-                    console.log('Received data:', data);
-                    
-                    if (data.type === 'update' || data.type === 'status') {
-                        setEAConnected(data.connected);
-                        if (data.data) {
-                            // Update account data
-                            if (data.data.account) {
-                                setAccountData({
-                                    balance: parseFloat(data.data.account.balance || 0),
-                                    equity: parseFloat(data.data.account.equity || 0),
-                                    margin: parseFloat(data.data.account.margin || 0),
-                                    freeMargin: parseFloat(data.data.account.freeMargin || 0),
-                                    number: data.data.account.number || 'N/A',
-                                    currency: data.data.account.currency || 'USD',
-                                    leverage: data.data.account.leverage || '1:100',
-                                    server: data.data.account.server || 'Unknown'
-                                });
-
-                                // Update equity history
-                                if (data.data.account.equity) {
-                                    setEquityHistory(prev => [
-                                        ...prev,
-                                        {
-                                            time: new Date().toLocaleTimeString(),
-                                            value: parseFloat(data.data.account.equity)
-                                        }
-                                    ].slice(-20)); // Keep last 20 points
+                    const message = JSON.parse(event.data);
+                    switch (message.type) {
+                        case 'update':
+                            if (message.data) {
+                                if (message.data.account) {
+                                    setAccountData({
+                                        balance: parseFloat(message.data.account.balance || 0),
+                                        equity: parseFloat(message.data.account.equity || 0),
+                                        margin: parseFloat(message.data.account.margin || 0),
+                                        freeMargin: parseFloat(message.data.account.freeMargin || 0),
+                                        number: message.data.account.number || 'N/A',
+                                        currency: message.data.account.currency || 'USD',
+                                        leverage: message.data.account.leverage || '1:100',
+                                        server: message.data.account.server || 'Unknown'
+                                    });
+                                }
+                                if (message.data.positions) {
+                                    setPositions(message.data.positions);
+                                }
+                                if (message.data.equityHistory) {
+                                    setEquityHistory(message.data.equityHistory);
                                 }
                             }
-                        }
+                            break;
+                        case 'status':
+                            if (message.eaConnected !== undefined) {
+                                setEAConnected(message.eaConnected);
+                            }
+                            break;
+                        default:
+                            console.log('Unknown message type:', message.type);
                     }
                 } catch (error) {
-                    console.error('Error processing message:', error);
+                    console.error('Error parsing WebSocket message:', error);
                 }
             };
-        } catch (error) {
-            console.error('Error creating WebSocket:', error);
-            setError('Failed to create WebSocket connection');
-        }
-    }, []);
+        };
 
-    // Initialize WebSocket connection
-    useEffect(() => {
         connectWebSocket();
 
         return () => {
             if (ws.current) {
                 ws.current.close();
-                ws.current = null;
             }
         };
-    }, [connectWebSocket]);
+    }, [connected]);
 
     return (
         <BrowserRouter>
-            <div className="bg-gray-900 min-h-screen">
-                <Layout>
-                    <Routes>
-                        <Route 
-                            path="/" 
-                            element={
-                                <Dashboard 
-                                    accountData={accountData} 
-                                    equityHistory={equityHistory}
-                                    connected={connected}
-                                    eaConnected={eaConnected}
-                                />
-                            } 
-                        />
-                        <Route 
-                            path="/trading" 
-                            element={
-                                <WebTerminal 
-                                    accountData={accountData}
-                                    connected={connected}
-                                    eaConnected={eaConnected}
-                                />
-                            } 
-                        />
-                    </Routes>
-                </Layout>
+            <div className="bg-[#0a0f1a] min-h-screen">
+                <Routes>
+                    <Route path="/" element={<Layout />}>
+                        <Route index element={
+                            <Dashboard 
+                                accountData={accountData}
+                                equityHistory={equityHistory}
+                                connected={connected}
+                                eaConnected={eaConnected}
+                            />
+                        } />
+                        <Route path="terminal" element={
+                            <WebTerminal 
+                                accountData={accountData}
+                                positions={positions}
+                                connected={connected}
+                                eaConnected={eaConnected}
+                            />
+                        } />
+                    </Route>
+                </Routes>
                 <ToastContainer
                     position="bottom-right"
                     autoClose={2000}
