@@ -122,54 +122,7 @@ const WebTerminal = () => {
 
     // Initialize WebSocket connection
     useEffect(() => {
-        ws.current = new WebSocket('wss://g1-back.onrender.com');
-
-        ws.current.onopen = () => {
-            console.log('WebSocket Connected');
-            setConnected(true);
-            setError(null);
-        };
-
-        ws.current.onclose = () => {
-            console.log('WebSocket Disconnected');
-            setConnected(false);
-            setError('Connection lost. Reconnecting...');
-            
-            // Attempt to reconnect
-            setTimeout(() => {
-                if (ws.current?.readyState === WebSocket.CLOSED) {
-                    console.log('Attempting to reconnect...');
-                    ws.current = new WebSocket('wss://g1-back.onrender.com');
-                }
-            }, 5000);
-        };
-
-        ws.current.onerror = (error) => {
-            console.error('WebSocket Error:', error);
-            setError('Connection error occurred');
-        };
-
-        ws.current.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                console.log('Received message:', data);
-
-                if (data.type === 'update' || data.type === 'status') {
-                    setEAConnected(data.connected);
-                    if (data.data) {
-                        if (data.data.account) {
-                            setAccountData(data.data.account);
-                        }
-                        if (data.data.positions) {
-                            setPositions(data.data.positions);
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('Error processing message:', error);
-            }
-        };
-
+        connectWebSocket();
         return () => {
             if (ws.current) {
                 ws.current.close();
@@ -464,25 +417,40 @@ const WebTerminal = () => {
         const ws = useRef(null);
 
         useEffect(() => {
-            // Connect to WebSocket if not already connected
-            if (!ws.current) {
+            connectWebSocket();
+            return () => {
+                if (ws.current) {
+                    ws.current.close();
+                }
+            };
+        }, []);
+
+        const connectWebSocket = () => {
+            if (!ws.current || ws.current.readyState === WebSocket.CLOSED) {
+                console.log('Connecting to WebSocket...');
                 ws.current = new WebSocket('wss://g1-back.onrender.com');
                 
                 ws.current.onopen = () => {
-                    console.log('WebSocket connected');
+                    console.log('WebSocket connected successfully');
                 };
                 
                 ws.current.onmessage = (event) => {
                     try {
+                        console.log('Received WebSocket message:', event.data);
                         const message = JSON.parse(event.data);
-                        console.log('Received WebSocket message:', message);
+                        
                         if (message.type === 'tradeHistory') {
+                            console.log('Received trade history:', message.data);
                             setHistory(message.data);
+                            setLoading(false);
+                        } else if (message.type === 'error') {
+                            console.error('Received error:', message.error);
+                            setError(message.error);
                             setLoading(false);
                         }
                     } catch (error) {
                         console.error('Error parsing WebSocket message:', error);
-                        setError('Failed to parse history data');
+                        setError('Failed to parse server response');
                         setLoading(false);
                     }
                 };
@@ -492,34 +460,35 @@ const WebTerminal = () => {
                     setError('WebSocket connection error');
                     setLoading(false);
                 };
-            }
 
-            return () => {
-                if (ws.current) {
-                    ws.current.close();
-                }
-            };
-        }, []);
+                ws.current.onclose = () => {
+                    console.log('WebSocket connection closed');
+                    setTimeout(connectWebSocket, 3000); // Reconnect after 3 seconds
+                };
+            }
+        };
         
         const syncHistory = () => {
+            if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
+                console.error('WebSocket not connected');
+                setError('Not connected to server. Trying to reconnect...');
+                connectWebSocket();
+                return;
+            }
+
             setLoading(true);
             setError('');
             
             try {
-                if (ws.current?.readyState === WebSocket.OPEN) {
-                    const command = period === 'custom'
+                const command = {
+                    type: 'command',
+                    command: period === 'custom'
                         ? `GET_HISTORY|${period}|${customRange.startDate}|${customRange.endDate}`
-                        : `GET_HISTORY|${period}`;
-                    
-                    console.log('Sending history request:', command);
-                    ws.current.send(JSON.stringify({
-                        type: 'command',
-                        command: command
-                    }));
-                } else {
-                    setError('WebSocket not connected. Please try again.');
-                    setLoading(false);
-                }
+                        : `GET_HISTORY|${period}`
+                };
+                
+                console.log('Sending history request:', command);
+                ws.current.send(JSON.stringify(command));
             } catch (error) {
                 console.error('Error sending history request:', error);
                 setError('Failed to request trade history');

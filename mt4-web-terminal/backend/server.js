@@ -91,8 +91,9 @@ app.post('/api/mt4/update', express.text(), (req, res) => {
             lastEAUpdate = Date.now();
 
             // Get any pending commands and send them to EA
-            const commands = [...pendingCommands]; 
-            pendingCommands.length = 0; 
+            const commands = [...pendingCommands];
+            pendingCommands.length = 0; // Clear the array without reassignment
+            console.log('Sending pending commands to EA:', commands);
 
             // Broadcast update to clients
             broadcast({
@@ -107,6 +108,7 @@ app.post('/api/mt4/update', express.text(), (req, res) => {
                 commands: commands 
             });
         } else {
+            console.log('Invalid data format received from MT4');
             res.json({ 
                 success: false,
                 error: 'Invalid data format'
@@ -408,25 +410,28 @@ wss.on('connection', (ws) => {
     // Handle incoming messages
     ws.on('message', (message) => {
         try {
+            console.log('Raw message received:', message.toString());
             const data = JSON.parse(message.toString());
-            console.log('Received WebSocket message:', data);
+            console.log('Parsed WebSocket message:', data);
 
-            if (data.type === 'command') {
+            if (data.type === 'command' && data.command) {
                 const [cmd, ...params] = data.command.split('|');
                 console.log('Processing command:', cmd, 'with params:', params);
                 
                 if (cmd === 'GET_HISTORY') {
                     // Add command to pending queue for EA to process
                     pendingCommands.push(data.command);
-                    console.log('Added history request to pending commands:', data.command);
+                    console.log('Added history request to pending commands. Current queue:', pendingCommands);
                     
                     // Create a request tracker
                     const requestId = Date.now().toString();
                     historyRequests.set(requestId, ws);
+                    console.log('Created history request tracker:', requestId);
                     
                     // Set timeout for request
                     setTimeout(() => {
                         if (historyRequests.has(requestId)) {
+                            console.log('History request timed out:', requestId);
                             historyRequests.delete(requestId);
                             ws.send(JSON.stringify({
                                 type: 'error',
@@ -440,7 +445,7 @@ wss.on('connection', (ws) => {
             console.error('Error processing WebSocket message:', error);
             ws.send(JSON.stringify({
                 type: 'error',
-                error: 'Failed to process command'
+                error: 'Failed to process command: ' + error.message
             }));
         }
     });
@@ -454,16 +459,18 @@ wss.on('connection', (ws) => {
 // Handle trade history from EA
 app.post('/api/trade-history/ea', (req, res) => {
     try {
-        console.log('Received trade history from EA:', req.body);
+        console.log('Received trade history from EA. Body:', req.body);
         const historyData = req.body;
 
         // Broadcast to all connected WebSocket clients
         wss.clients.forEach(client => {
             if (client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({
+                const message = JSON.stringify({
                     type: 'tradeHistory',
                     data: historyData.data
-                }));
+                });
+                console.log('Broadcasting history to client:', message);
+                client.send(message);
             }
         });
 
