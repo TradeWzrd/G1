@@ -151,82 +151,90 @@ const WebTerminal = () => {
     const handleClosePosition = useCallback((ticket, percentage = 100) => {
         if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
             console.error('WebSocket not connected');
+            setError('Not connected to server');
             return;
         }
         
-        const command = percentage === 100 
-            ? `CLOSE,${ticket}`
-            : `CLOSE,${ticket},${percentage}`;
+        const command = {
+            type: 'command',
+            data: percentage === 100 
+                ? `CLOSE,${ticket}`
+                : `PARTIAL,${ticket},${percentage}`,
+            timestamp: Date.now()
+        };
             
         console.log('Sending close command:', command);
-        ws.current.send(JSON.stringify({
-            type: 'command',
-            data: command
-        }));
+        ws.current.send(JSON.stringify(command));
+        
+        // Show temporary success message
+        setSuccess('Close command sent successfully');
+        setTimeout(() => setSuccess(null), 3000);
     }, []);
 
     const handleModifyPosition = useCallback((ticket, sl, tp) => {
         if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
             console.error('WebSocket not connected');
+            setError('Not connected to server');
             return;
         }
         
-        console.log('Sending modify command:', `MODIFY,${ticket},${sl},${tp}`);
-        ws.current.send(JSON.stringify({
+        const command = {
             type: 'command',
-            data: `MODIFY,${ticket},${sl},${tp}`
-        }));
+            data: `MODIFY,${ticket},${sl},${tp}`,
+            timestamp: Date.now()
+        };
+        
+        console.log('Sending modify command:', command);
+        ws.current.send(JSON.stringify(command));
+        
+        // Show temporary success message
+        setSuccess('Modify command sent successfully');
+        setTimeout(() => setSuccess(null), 3000);
     }, []);
 
     const handleBreakeven = useCallback((ticket, pips = 0) => {
         if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
             console.error('WebSocket not connected');
+            setError('Not connected to server');
             return;
         }
         
-        console.log('Sending breakeven command:', `BREAKEVEN,${ticket},${pips}`);
-        ws.current.send(JSON.stringify({
+        const command = {
             type: 'command',
-            data: `BREAKEVEN,${ticket},${pips}`
-        }));
+            data: `BE,${ticket},${pips}`,
+            timestamp: Date.now()
+        };
+        
+        console.log('Sending breakeven command:', command);
+        ws.current.send(JSON.stringify(command));
+        
+        // Show temporary success message
+        setSuccess('Break-even command sent successfully');
+        setTimeout(() => setSuccess(null), 3000);
     }, []);
 
     // Handle trade execution
     const executeTrade = async (type) => {
         try {
-            console.log('Executing trade:', { type, ...newOrder });
-            const response = await fetch('https://g1-back.onrender.com/api/trade', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    action: 'open',
-                    symbol: newOrder.symbol,
-                    type: type,
-                    lots: parseFloat(newOrder.lots),
-                    stopLoss: parseFloat(newOrder.stopLoss || 0),
-                    takeProfit: parseFloat(newOrder.takeProfit || 0)
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
+                throw new Error('Not connected to server');
             }
 
-            const data = await response.json();
-            console.log('Trade response:', data);
+            const command = {
+                type: 'command',
+                data: `${type === 0 ? 'BUY' : 'SELL'},${newOrder.symbol},${newOrder.lots},${newOrder.stopLoss || 0},${newOrder.takeProfit || 0}`,
+                timestamp: Date.now()
+            };
+
+            console.log('Sending trade command:', command);
+            ws.current.send(JSON.stringify(command));
             
-            if (data.success) {
-                setSuccess('Order executed successfully!');
-                setError(null);
-                setTimeout(() => setSuccess(null), 3000);
-            } else {
-                setError(data.error || 'Failed to execute order');
-            }
+            // Show temporary success message
+            setSuccess('Trade command sent successfully');
+            setTimeout(() => setSuccess(null), 3000);
         } catch (error) {
             console.error('Trade error:', error);
-            setError('Network error: ' + error.message);
+            setError(error.message);
         }
     };
 
@@ -274,7 +282,8 @@ const WebTerminal = () => {
                 id: requestId,
                 command: customRange
                     ? `GET_HISTORY|custom|${customRange.startDate}|${customRange.endDate}`
-                    : `GET_HISTORY|${period}`
+                    : `GET_HISTORY|${period}`,
+                timestamp: Date.now()
             };
             
             console.log('Sending history request:', command);

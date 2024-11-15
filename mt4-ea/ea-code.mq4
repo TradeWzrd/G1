@@ -83,10 +83,24 @@ string ExtractValueFromJson(string json, string key)
                 }
             }
             // Handle string values
-            else {
+            else if (StringGetCharacter(StringSubstr(json, colonPos + 1, 1), 0) == '"') {
                 int valueStart = StringFind(json, "\"", colonPos) + 1;
                 int valueEnd = StringFind(json, "\"", valueStart);
                 if (valueStart != 0 && valueEnd != -1) {
+                    value = StringSubstr(json, valueStart, valueEnd - valueStart);
+                }
+            }
+            // Handle numeric values
+            else {
+                int valueStart = colonPos + 1;
+                while (StringGetCharacter(StringSubstr(json, valueStart, 1), 0) == ' ') {
+                    valueStart++;
+                }
+                int valueEnd = StringFind(json, ",", valueStart);
+                if (valueEnd == -1) {
+                    valueEnd = StringFind(json, "}", valueStart);
+                }
+                if (valueEnd != -1) {
                     value = StringSubstr(json, valueStart, valueEnd - valueStart);
                 }
             }
@@ -96,7 +110,7 @@ string ExtractValueFromJson(string json, string key)
 }
 
 //+------------------------------------------------------------------+
-//| Process single command                                            |
+//| Process command                                                    |
 //+------------------------------------------------------------------+
 void ProcessCommand(string rawCommand)
 {
@@ -105,51 +119,72 @@ void ProcessCommand(string rawCommand)
     // Skip if empty command
     if (StringLen(rawCommand) == 0) return;
     
-    // Check if this is a JSON command
-    if (StringFind(rawCommand, "{") != -1) {
-        string command = ExtractValueFromJson(rawCommand, "command");
-        string requestId = ExtractValueFromJson(rawCommand, "requestId");
-        
-        if (StringLen(command) > 0) {
-            string parts[];
-            int numParts = StringSplit(command, '|', parts);
-            if (numParts > 0) {
-                string action = parts[0];
-                
-                if (action == "GET_HISTORY") {
-                    string period = numParts > 1 ? parts[1] : "ALL";
-                    string historyData = GetTradeHistory(period);
-                    
-                    // Append request ID if present
-                    if (StringLen(requestId) > 0) {
-                        historyData = StringConcatenate("HISTORY|REQUEST_ID|", requestId, "|", historyData);
-                    } else {
-                        historyData = StringConcatenate("HISTORY|", historyData);
-                    }
-                    
-                    SendToServer(historyData);
-                }
-                // Handle other commands here
-            }
-        }
+    // Extract command data from JSON format
+    string type = ExtractValueFromJson(rawCommand, "type");
+    string data = ExtractValueFromJson(rawCommand, "data");
+    string timestamp = ExtractValueFromJson(rawCommand, "timestamp");
+    
+    // Skip if no command data
+    if (StringLen(data) == 0) {
+        Print("No command data found");
         return;
     }
     
-    // Handle non-JSON commands (legacy format)
+    // Process the command data
+    ProcessSingleCommand(data);
+}
+
+//+------------------------------------------------------------------+
+//| Process a single command                                          |
+//+------------------------------------------------------------------+
+void ProcessSingleCommand(string command)
+{
+    // Trim whitespace
+    while (StringGetChar(command, 0) == ' ') {
+        command = StringSubstr(command, 1);
+    }
+    while (StringGetChar(command, StringLen(command) - 1) == ' ') {
+        command = StringSubstr(command, 0, StringLen(command) - 1);
+    }
+    
     string parts[];
-    int numParts = StringSplit(rawCommand, '|', parts);
+    int numParts = StringSplit(command, ',', parts);
     if (numParts < 1) return;
     
+    // Trim whitespace from action
     string action = parts[0];
+    while (StringGetChar(action, 0) == ' ') {
+        action = StringSubstr(action, 1);
+    }
+    while (StringGetChar(action, StringLen(action) - 1) == ' ') {
+        action = StringSubstr(action, 0, StringLen(action) - 1);
+    }
     
     if(action == "BUY" || action == "SELL") {
         if(numParts < 5) {
-            Print("Invalid buy/sell command format");
+            SendError("Invalid buy/sell command format. Expected: BUY/SELL,symbol,lots,sl,tp");
             return;
         }
         
+        // Trim whitespace from parameters
         string symbol = parts[1];
+        while (StringGetChar(symbol, 0) == ' ') {
+            symbol = StringSubstr(symbol, 1);
+        }
+        while (StringGetChar(symbol, StringLen(symbol) - 1) == ' ') {
+            symbol = StringSubstr(symbol, 0, StringLen(symbol) - 1);
+        }
+        
+        // Convert and validate lots
         double lots = StringToDouble(parts[2]);
+        if(lots <= 0 || lots > MarketInfo(symbol, MODE_MAXLOT)) {
+            SendError("Invalid lot size: " + DoubleToStr(lots, 2) + ". Valid range: " + 
+                     DoubleToStr(MarketInfo(symbol, MODE_MINLOT), 2) + " - " + 
+                     DoubleToStr(MarketInfo(symbol, MODE_MAXLOT), 2));
+            return;
+        }
+        
+        // Convert and validate SL/TP
         double sl = StringToDouble(parts[3]);
         double tp = StringToDouble(parts[4]);
         
@@ -158,18 +193,44 @@ void ProcessCommand(string rawCommand)
         RefreshRates();
         double price = (type == OP_BUY) ? MarketInfo(symbol, MODE_ASK) : MarketInfo(symbol, MODE_BID);
         
-        Print("Executing order: ", symbol, " ", type, " ", lots, " @ ", price, " sl:", sl, " tp:", tp);
-        
-        // Add some validation
-        if(lots <= 0) {
-            Print("Invalid lot size: ", lots);
+        // Validate symbol
+        if(MarketInfo(symbol, MODE_DIGITS) == 0) {
+            SendError("Invalid symbol: " + symbol);
             return;
         }
         
+        // Validate price
         if(price <= 0) {
-            Print("Invalid price: ", price);
+            SendError("Invalid price: " + DoubleToStr(price, MarketInfo(symbol, MODE_DIGITS)));
             return;
         }
+        
+        // Validate stops
+        if(sl != 0) {
+            double minStopLevel = MarketInfo(symbol, MODE_STOPLEVEL) * MarketInfo(symbol, MODE_POINT);
+            if(type == OP_BUY && price - sl < minStopLevel) {
+                SendError("Stop Loss too close to current price. Minimum distance: " + DoubleToStr(minStopLevel, MarketInfo(symbol, MODE_DIGITS)));
+                return;
+            }
+            if(type == OP_SELL && sl - price < minStopLevel) {
+                SendError("Stop Loss too close to current price. Minimum distance: " + DoubleToStr(minStopLevel, MarketInfo(symbol, MODE_DIGITS)));
+                return;
+            }
+        }
+        
+        if(tp != 0) {
+            double minStopLevel = MarketInfo(symbol, MODE_STOPLEVEL) * MarketInfo(symbol, MODE_POINT);
+            if(type == OP_BUY && tp - price < minStopLevel) {
+                SendError("Take Profit too close to current price. Minimum distance: " + DoubleToStr(minStopLevel, MarketInfo(symbol, MODE_DIGITS)));
+                return;
+            }
+            if(type == OP_SELL && price - tp < minStopLevel) {
+                SendError("Take Profit too close to current price. Minimum distance: " + DoubleToStr(minStopLevel, MarketInfo(symbol, MODE_DIGITS)));
+                return;
+            }
+        }
+        
+        Print("Executing order: ", symbol, " ", type, " ", lots, " @ ", price, " sl:", sl, " tp:", tp);
         
         int ticket = OrderSend(
             symbol,          // Symbol
@@ -187,144 +248,306 @@ void ProcessCommand(string rawCommand)
         
         if(ticket < 0) {
             int error = GetLastError();
-            Print("Order failed - Error: ", error);
+            string errorMsg = "Order failed - ";
             switch(error) {
                 case ERR_INVALID_PRICE:
-                    Print("Invalid price level");
+                    errorMsg += "Invalid price level";
                     break;
                 case ERR_INVALID_STOPS:
-                    Print("Invalid stops");
+                    errorMsg += "Invalid stops";
                     break;
                 case ERR_INVALID_TRADE_VOLUME:
-                    Print("Invalid lot size");
+                    errorMsg += "Invalid lot size";
                     break;
                 case ERR_NOT_ENOUGH_MONEY:
-                    Print("Not enough money");
+                    errorMsg += "Not enough money";
+                    break;
+                case ERR_TRADE_NOT_ALLOWED:
+                    errorMsg += "Trading not allowed";
+                    break;
+                case ERR_MARKET_CLOSED:
+                    errorMsg += "Market closed";
+                    break;
+                case ERR_TRADE_DISABLED:
+                    errorMsg += "Trade disabled";
+                    break;
+                case ERR_BROKER_BUSY:
+                    errorMsg += "Broker busy";
+                    break;
+                case ERR_REQUOTE:
+                    errorMsg += "Requote";
                     break;
                 default:
-                    Print("Other error");
-                    break;
+                    errorMsg += "Unknown error: " + error;
             }
+            SendError(errorMsg);
         } else {
             Print("Order executed successfully - Ticket: ", ticket);
+            SendSuccess("Order executed successfully - Ticket: " + ticket);
         }
     }
-    else if(StringFind(action, "CLOSEALL") == 0) {
-        Print("Executing Close All command");
-        int type = -1;
-        
-        // Check if type is specified
-        if(numParts > 1) {
-            type = StringToInteger(parts[1]);
-            Print("Closing all positions of type: ", type);
-        } else {
-            Print("Closing all positions");
+    else if(action == "CLOSE" || action == "PARTIAL") {
+        if(numParts < 2) {
+            SendError("Invalid " + action + " command format. Expected: " + action + ",ticket[,percentage]");
+            return;
         }
         
-        bool success = true;
-        for(int i = OrdersTotal() - 1; i >= 0; i--) {
-            if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
-                // Check if we should close this position
-                if(type == -1 || OrderType() == type) {
-                    RefreshRates();
-                    double closePrice = OrderType() == OP_BUY ? 
-                        MarketInfo(OrderSymbol(), MODE_BID) : 
-                        MarketInfo(OrderSymbol(), MODE_ASK);
-                        
-                    bool result = OrderClose(OrderTicket(), OrderLots(), closePrice, 3);
-                    if(!result) {
-                        Print("Failed to close order #", OrderTicket(), " Error: ", GetLastError());
-                        success = false;
-                    } else {
-                        Print("Successfully closed order #", OrderTicket());
+        int ticket = (int)StringToInteger(parts[1]);
+        double percentage = action == "CLOSE" ? 100 : 50; // Default to 50% for partial
+        
+        if(numParts > 2) {
+            percentage = StringToDouble(parts[2]);
+            if(percentage <= 0 || percentage > 100) {
+                SendError("Invalid percentage: " + DoubleToStr(percentage, 2) + ". Valid range: 1.00 - 100.00");
+                return;
+            }
+        }
+        
+        if(!OrderSelect(ticket, SELECT_BY_TICKET)) {
+            SendError("Order not found: " + ticket);
+            return;
+        }
+        
+        // Store original values in case we need to restore them
+        double origLots = OrderLots();
+        double origSL = OrderStopLoss();
+        double origTP = OrderTakeProfit();
+        
+        double lots = origLots;
+        if(percentage < 100) {
+            lots = NormalizeDouble(lots * percentage / 100, 2);
+            if(lots < MarketInfo(OrderSymbol(), MODE_MINLOT)) {
+                SendError("Resulting lot size too small: " + DoubleToStr(lots, 2) + ". Minimum lot size: " + DoubleToStr(MarketInfo(OrderSymbol(), MODE_MINLOT), 2));
+                return;
+            }
+        }
+        
+        RefreshRates();
+        double closePrice = OrderType() == OP_BUY ? 
+            MarketInfo(OrderSymbol(), MODE_BID) : 
+            MarketInfo(OrderSymbol(), MODE_ASK);
+            
+        bool success = OrderClose(
+            ticket,
+            lots,
+            closePrice,
+            3,
+            clrRed
+        );
+        
+        if(!success) {
+            int error = GetLastError();
+            string errorMsg = "Failed to " + action + " order: ";
+            switch(error) {
+                case ERR_INVALID_PRICE:
+                    errorMsg += "Invalid close price";
+                    break;
+                case ERR_INVALID_TRADE_VOLUME:
+                    errorMsg += "Invalid lot size";
+                    break;
+                case ERR_TRADE_NOT_ALLOWED:
+                    errorMsg += "Trading not allowed";
+                    break;
+                case ERR_MARKET_CLOSED:
+                    errorMsg += "Market closed";
+                    break;
+                case ERR_TRADE_DISABLED:
+                    errorMsg += "Trade disabled";
+                    break;
+                case ERR_BROKER_BUSY:
+                    errorMsg += "Broker busy";
+                    break;
+                case ERR_REQUOTE:
+                    errorMsg += "Requote";
+                    break;
+                default:
+                    errorMsg += "Unknown error: " + error;
+            }
+            SendError(errorMsg);
+        } else {
+            string successMsg = action == "CLOSE" ? "Order closed successfully" : "Order partially closed successfully";
+            Print(successMsg);
+            SendSuccess(successMsg);
+            
+            // If this was a partial close and we still have remaining position
+            if(percentage < 100 && success) {
+                // Find the new ticket (it's usually the last one)
+                for(int i = OrdersTotal() - 1; i >= 0; i--) {
+                    if(OrderSelect(i, SELECT_BY_POS) && 
+                       OrderSymbol() == Symbol() && 
+                       OrderLots() == NormalizeDouble(origLots - lots, 2)) {
+                        // Restore original SL/TP on remaining position
+                        OrderModify(OrderTicket(), OrderOpenPrice(), origSL, origTP, 0, clrBlue);
+                        break;
                     }
                 }
             }
         }
-        Print("Close All operation completed. Success: ", success);
-    }
-    else if(action == "CLOSE") {
-        if(numParts < 2) return;
-        
-        int ticket = StringToInteger(parts[1]);
-        double lots = OrderLots(); // Default to full position
-        
-        // If partial close is requested
-        if(numParts > 2) {
-            double percentage = StringToDouble(parts[2]);
-            if(percentage > 0 && percentage < 100) {
-                lots = NormalizeDouble(OrderLots() * percentage / 100, 2);
-            }
-        }
-        
-        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
-            RefreshRates();
-            double closePrice = OrderType() == OP_BUY ? 
-                MarketInfo(OrderSymbol(), MODE_BID) : 
-                MarketInfo(OrderSymbol(), MODE_ASK);
-                
-            bool result = OrderClose(ticket, lots, closePrice, 3);
-            if(!result) {
-                Print("Failed to close order #", ticket, " Error: ", GetLastError());
-            } else {
-                Print("Successfully closed order #", ticket, " Lots: ", lots);
-            }
-        }
     }
     else if(action == "MODIFY") {
-        if(numParts < 4) return;
+        if(numParts < 4) {
+            SendError("Invalid modify command format. Expected: MODIFY,ticket,sl,tp");
+            return;
+        }
         
-        int ticket = StringToInteger(parts[1]);
-        double sl = StringToDouble(parts[2]);
-        double tp = StringToDouble(parts[3]);
+        int ticket = (int)StringToInteger(parts[1]);
+        double newSL = StringToDouble(parts[2]);
+        double newTP = StringToDouble(parts[3]);
         
-        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
-            bool result = OrderModify(ticket, OrderOpenPrice(), sl, tp, 0);
-            if(!result) {
-                Print("Failed to modify order #", ticket, " Error: ", GetLastError());
-            } else {
-                Print("Successfully modified order #", ticket);
+        if(!OrderSelect(ticket, SELECT_BY_TICKET)) {
+            SendError("Order not found: " + ticket);
+            return;
+        }
+        
+        RefreshRates();
+        
+        // Validate stops
+        double minStopLevel = MarketInfo(OrderSymbol(), MODE_STOPLEVEL) * MarketInfo(OrderSymbol(), MODE_POINT);
+        double currentPrice = OrderType() == OP_BUY ? 
+            MarketInfo(OrderSymbol(), MODE_BID) : 
+            MarketInfo(OrderSymbol(), MODE_ASK);
+            
+        if(newSL != 0) {
+            if(OrderType() == OP_BUY && currentPrice - newSL < minStopLevel) {
+                SendError("Stop Loss too close to current price. Minimum distance: " + DoubleToStr(minStopLevel, MarketInfo(OrderSymbol(), MODE_DIGITS)));
+                return;
             }
+            if(OrderType() == OP_SELL && newSL - currentPrice < minStopLevel) {
+                SendError("Stop Loss too close to current price. Minimum distance: " + DoubleToStr(minStopLevel, MarketInfo(OrderSymbol(), MODE_DIGITS)));
+                return;
+            }
+        }
+        
+        if(newTP != 0) {
+            if(OrderType() == OP_BUY && newTP - currentPrice < minStopLevel) {
+                SendError("Take Profit too close to current price. Minimum distance: " + DoubleToStr(minStopLevel, MarketInfo(OrderSymbol(), MODE_DIGITS)));
+                return;
+            }
+            if(OrderType() == OP_SELL && currentPrice - newTP < minStopLevel) {
+                SendError("Take Profit too close to current price. Minimum distance: " + DoubleToStr(minStopLevel, MarketInfo(OrderSymbol(), MODE_DIGITS)));
+                return;
+            }
+        }
+        
+        bool success = OrderModify(
+            ticket,
+            OrderOpenPrice(),
+            newSL,
+            newTP,
+            0,
+            clrBlue
+        );
+        
+        if(!success) {
+            int error = GetLastError();
+            string errorMsg = "Failed to modify order: ";
+            switch(error) {
+                case ERR_INVALID_STOPS:
+                    errorMsg += "Invalid stop levels";
+                    break;
+                case ERR_INVALID_TRADE_PARAMETERS:
+                    errorMsg += "Invalid trade parameters";
+                    break;
+                case ERR_TRADE_NOT_ALLOWED:
+                    errorMsg += "Trading not allowed";
+                    break;
+                case ERR_MARKET_CLOSED:
+                    errorMsg += "Market closed";
+                    break;
+                case ERR_TRADE_DISABLED:
+                    errorMsg += "Trade disabled";
+                    break;
+                default:
+                    errorMsg += "Unknown error: " + error;
+            }
+            SendError(errorMsg);
+        } else {
+            Print("Order modified successfully");
+            SendSuccess("Order modified successfully");
         }
     }
-    else if(action == "BREAKEVEN") {
-        if(numParts < 2) return;
-        
-        int ticket = StringToInteger(parts[1]);
-        double pips = 0;
-        
-        // Optional pips buffer
-        if(numParts > 2) {
-            pips = StringToDouble(parts[2]);
+    else if(action == "BE") {
+        if(numParts < 2) {
+            SendError("Invalid BE command format. Expected: BE,ticket[,lockProfit]");
+            return;
         }
         
-        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
-            double openPrice = OrderOpenPrice();
-            double newSL = openPrice;
+        int ticket = (int)StringToInteger(parts[1]);
+        double lockProfit = numParts > 2 ? StringToDouble(parts[2]) : 0; // Optional profit to lock
+        
+        if(!OrderSelect(ticket, SELECT_BY_TICKET)) {
+            SendError("Order not found: " + ticket);
+            return;
+        }
+        
+        RefreshRates();
+        
+        double openPrice = OrderOpenPrice();
+        double currentPrice = OrderType() == OP_BUY ? 
+            MarketInfo(OrderSymbol(), MODE_BID) : 
+            MarketInfo(OrderSymbol(), MODE_ASK);
             
-            // Add pips buffer if specified
-            if(pips > 0) {
-                double pipValue = MarketInfo(OrderSymbol(), MODE_POINT) * 10;
-                if(OrderType() == OP_BUY) {
-                    newSL += pips * pipValue;
-                } else if(OrderType() == OP_SELL) {
-                    newSL -= pips * pipValue;
-                }
-            }
-            
-            bool result = OrderModify(ticket, openPrice, newSL, OrderTakeProfit(), 0);
-            if(!result) {
-                Print("Failed to set breakeven for order #", ticket, " Error: ", GetLastError());
+        // Check if we're in profit
+        bool inProfit = (OrderType() == OP_BUY && currentPrice > openPrice) ||
+                       (OrderType() == OP_SELL && currentPrice < openPrice);
+                       
+        if(!inProfit) {
+            SendError("Order not in profit, cannot set break even");
+            return;
+        }
+        
+        double newSL = openPrice;
+        if(lockProfit > 0) {
+            // Add locked profit to break even level
+            if(OrderType() == OP_BUY) {
+                newSL = openPrice + (lockProfit * MarketInfo(OrderSymbol(), MODE_POINT));
             } else {
-                Print("Successfully set breakeven for order #", ticket);
+                newSL = openPrice - (lockProfit * MarketInfo(OrderSymbol(), MODE_POINT));
             }
         }
-    }
-    else if(action == "GET_HISTORY") {
-        string period = numParts > 1 ? parts[1] : "ALL";
-        string historyData = GetTradeHistory(period);
-        historyData = StringConcatenate("HISTORY|", historyData);
-        SendToServer(historyData);
+        
+        // Validate stop level
+        double minStopLevel = MarketInfo(OrderSymbol(), MODE_STOPLEVEL) * MarketInfo(OrderSymbol(), MODE_POINT);
+        if(OrderType() == OP_BUY && currentPrice - newSL < minStopLevel) {
+            SendError("Break even level too close to current price. Minimum distance: " + DoubleToStr(minStopLevel, MarketInfo(OrderSymbol(), MODE_DIGITS)));
+            return;
+        }
+        if(OrderType() == OP_SELL && newSL - currentPrice < minStopLevel) {
+            SendError("Break even level too close to current price. Minimum distance: " + DoubleToStr(minStopLevel, MarketInfo(OrderSymbol(), MODE_DIGITS)));
+            return;
+        }
+        
+        bool success = OrderModify(
+            ticket,
+            OrderOpenPrice(),
+            newSL,
+            OrderTakeProfit(),
+            0,
+            clrBlue
+        );
+        
+        if(!success) {
+            int error = GetLastError();
+            string errorMsg = "Failed to set break even: ";
+            switch(error) {
+                case ERR_INVALID_STOPS:
+                    errorMsg += "Invalid stop level";
+                    break;
+                case ERR_INVALID_TRADE_PARAMETERS:
+                    errorMsg += "Invalid trade parameters";
+                    break;
+                case ERR_TRADE_NOT_ALLOWED:
+                    errorMsg += "Trading not allowed";
+                    break;
+                default:
+                    errorMsg += "Unknown error: " + error;
+            }
+            SendError(errorMsg);
+        } else {
+            string successMsg = "Break even set successfully" + (lockProfit > 0 ? " with " + lockProfit + " points locked" : "");
+            Print(successMsg);
+            SendSuccess(successMsg);
+        }
     }
 }
 
@@ -590,4 +813,22 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
             }
         }
     }
+}
+
+//+------------------------------------------------------------------+
+//| Send error message to server                                      |
+//+------------------------------------------------------------------+
+void SendError(string message)
+{
+    string data = "ERROR|" + message;
+    SendToServer(data);
+}
+
+//+------------------------------------------------------------------+
+//| Send success message to server                                    |
+//+------------------------------------------------------------------+
+void SendSuccess(string message)
+{
+    string data = "SUCCESS|" + message;
+    SendToServer(data);
 }
