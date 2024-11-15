@@ -55,53 +55,92 @@ void ProcessServerResponse(string response)
 {
     Print("Processing server response: ", response);
     
-    // Extract commands array
-    string commands = GetJsonValue(response, "commands");
-    if(StringLen(commands) == 0) return;
-    
-    // Remove brackets [ ]
-    if(StringGetChar(commands, 0) == '[')
-        commands = StringSubstr(commands, 1, StringLen(commands) - 2);
-    
-    Print("Commands to process: ", commands);
-    
-    // Process each command
-    string cmdArray[];
-    int numCmds = StringSplit(commands, '"', cmdArray);
-    
-    for(int i = 0; i < numCmds; i++) {
-        string cmd = cmdArray[i];
-        // Skip empty or separator elements
-        if(StringLen(cmd) > 0 && cmd != "," && cmd != "[" && cmd != "]") {
-            ProcessCommand(cmd);
+    // Check if response contains commands
+    if (StringFind(response, "commands") != -1) {
+        string commandsStr = ExtractValueFromJson(response, "commands");
+        if (StringLen(commandsStr) > 0) {
+            ProcessCommand(commandsStr);
         }
     }
 }
 
 //+------------------------------------------------------------------+
-//| Process single command                                            |
+//| Process JSON command                                               |
 //+------------------------------------------------------------------+
-void ProcessCommand(string cmd)
+string ExtractValueFromJson(string json, string key)
 {
-    Print("Processing single command: ", cmd);
-
-    // Split command into parts, handling both comma and pipe delimiters
-    string parts[];
-    int numParts = StringSplit(cmd, '|', parts);
-    if (numParts < 1) return;
-    
-    string action = parts[0];
-    string requestId = "";
-    
-    // Extract request ID if present
-    if (StringFind(cmd, "requestId") >= 0) {
-        for (int i = 0; i < numParts; i++) {
-            if (StringFind(parts[i], "requestId") >= 0) {
-                requestId = parts[i+1];
-                break;
+    string value = "";
+    int keyPos = StringFind(json, "\"" + key + "\"");
+    if (keyPos != -1) {
+        int colonPos = StringFind(json, ":", keyPos);
+        if (colonPos != -1) {
+            // Handle array values
+            if (StringGetCharacter(StringSubstr(json, colonPos + 1, 1), 0) == '[') {
+                int arrayStart = StringFind(json, "[", colonPos);
+                int arrayEnd = StringFind(json, "]", arrayStart);
+                if (arrayStart != -1 && arrayEnd != -1) {
+                    value = StringSubstr(json, arrayStart, arrayEnd - arrayStart + 1);
+                }
+            }
+            // Handle string values
+            else {
+                int valueStart = StringFind(json, "\"", colonPos) + 1;
+                int valueEnd = StringFind(json, "\"", valueStart);
+                if (valueStart != 0 && valueEnd != -1) {
+                    value = StringSubstr(json, valueStart, valueEnd - valueStart);
+                }
             }
         }
     }
+    return value;
+}
+
+//+------------------------------------------------------------------+
+//| Process single command                                            |
+//+------------------------------------------------------------------+
+void ProcessCommand(string rawCommand)
+{
+    Print("Processing command: ", rawCommand);
+    
+    // Skip if empty command
+    if (StringLen(rawCommand) == 0) return;
+    
+    // Check if this is a JSON command
+    if (StringFind(rawCommand, "{") != -1) {
+        string command = ExtractValueFromJson(rawCommand, "command");
+        string requestId = ExtractValueFromJson(rawCommand, "requestId");
+        
+        if (StringLen(command) > 0) {
+            string parts[];
+            int numParts = StringSplit(command, '|', parts);
+            if (numParts > 0) {
+                string action = parts[0];
+                
+                if (action == "GET_HISTORY") {
+                    string period = numParts > 1 ? parts[1] : "ALL";
+                    string historyData = GetTradeHistory(period);
+                    
+                    // Append request ID if present
+                    if (StringLen(requestId) > 0) {
+                        historyData = StringConcatenate("HISTORY|REQUEST_ID|", requestId, "|", historyData);
+                    } else {
+                        historyData = StringConcatenate("HISTORY|", historyData);
+                    }
+                    
+                    SendToServer(historyData);
+                }
+                // Handle other commands here
+            }
+        }
+        return;
+    }
+    
+    // Handle non-JSON commands (legacy format)
+    string parts[];
+    int numParts = StringSplit(rawCommand, '|', parts);
+    if (numParts < 1) return;
+    
+    string action = parts[0];
     
     if(action == "BUY" || action == "SELL") {
         if(numParts < 5) {
@@ -284,14 +323,7 @@ void ProcessCommand(string cmd)
     else if(action == "GET_HISTORY") {
         string period = numParts > 1 ? parts[1] : "ALL";
         string historyData = GetTradeHistory(period);
-        
-        // Append request ID to history data if present
-        if (StringLen(requestId) > 0) {
-            historyData = StringConcatenate("HISTORY|REQUEST_ID|", requestId, "|", historyData);
-        } else {
-            historyData = StringConcatenate("HISTORY|", historyData);
-        }
-        
+        historyData = StringConcatenate("HISTORY|", historyData);
         SendToServer(historyData);
     }
 }
@@ -333,7 +365,7 @@ string GetTradeHistory(string period, string startDate="", string endDate="")
     else if(period == "custom" && startDate != "" && endDate != "") {
         startTime = StrToTime(startDate);
         endTime = StrToTime(endDate) + 24 * 60 * 60 - 1; // End of the day
-        Print("Custom period history - Start:", TimeToStr(startTime), " End:", TimeToStr(endTime));
+        Print("Custom period history - Start:", TimeToStr(startTime), " End:", TimeToStr(endDate));
     }
     
     string history = "";
@@ -379,38 +411,6 @@ string GetTradeHistory(string period, string startDate="", string endDate="")
     }
     
     return history;
-}
-
-//+------------------------------------------------------------------+
-//| Extract value from JSON string                                    |
-//+------------------------------------------------------------------+
-string GetJsonValue(string json, string key)
-{
-    string searchKey = "\"" + key + "\"";
-    int pos = StringFind(json, searchKey);
-    if(pos == -1) return "";
-    
-    pos = StringFind(json, ":", pos);
-    if(pos == -1) return "";
-    
-    pos++;
-    while(StringGetChar(json, pos) == ' ') pos++;
-    
-    if(StringGetChar(json, pos) == '[') {
-        int depth = 1;
-        int startPos = pos + 1;
-        int length = StringLen(json);
-        
-        for(int i = startPos; i < length; i++) {
-            if(StringGetChar(json, i) == '[') depth++;
-            if(StringGetChar(json, i) == ']') depth--;
-            if(depth == 0) {
-                return StringSubstr(json, startPos - 1, i - startPos + 2);
-            }
-        }
-    }
-    
-    return "";
 }
 
 //+------------------------------------------------------------------+

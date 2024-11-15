@@ -113,7 +113,7 @@ const WebTerminal = () => {
                             }
                         }
                         setLastUpdate(new Date());
-                    } else if (data.type === 'tradeHistory') {
+                    } else if (data.type === 'history_response' || data.type === 'history_data') {
                         console.log('Received trade history:', data.data);
                         setHistoryLoading(false);
                         setHistoryError('');
