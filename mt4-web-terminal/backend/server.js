@@ -497,29 +497,41 @@ wss.on('connection', (ws) => {
             const data = JSON.parse(message);
             console.log('Received WebSocket message:', data);
 
-            if (data.type === 'command' && data.command.startsWith('GET_HISTORY')) {
-                const requestId = data.id || Date.now().toString();
-                console.log(`Processing history request ${requestId}:`, data.command);
+            if (data.type === 'command') {
+                if (typeof data.data === 'string' && data.data.startsWith('GET_HISTORY')) {
+                    const requestId = data.id || Date.now().toString();
+                    console.log(`Processing history request ${requestId}:`, data.data);
 
-                // Store request details
-                historyRequests.set(requestId, {
-                    timestamp: Date.now(),
-                    ws,
-                    command: data.command
-                });
+                    // Store request details
+                    historyRequests.set(requestId, {
+                        timestamp: Date.now(),
+                        ws,
+                        command: data.data
+                    });
 
-                // Forward command to EA
-                pendingCommands.push({
-                    command: data.command,
-                    requestId
-                });
+                    // Forward command to EA
+                    pendingCommands.push({
+                        command: data.data,
+                        requestId
+                    });
 
-                // Broadcast command to EA
-                broadcast(JSON.stringify({
-                    type: 'command',
-                    command: data.command,
-                    requestId
-                }));
+                    // Broadcast command to EA
+                    broadcast(JSON.stringify({
+                        type: 'command',
+                        command: data.data,
+                        requestId
+                    }));
+                } else {
+                    // Handle other trade commands
+                    console.log('Processing trade command:', data.data);
+                    pendingCommands.push(data.data);
+                    
+                    // Broadcast command to EA
+                    broadcast(JSON.stringify({
+                        type: 'command',
+                        command: data.data
+                    }));
+                }
             }
         } catch (error) {
             console.error('Error processing WebSocket message:', error);
