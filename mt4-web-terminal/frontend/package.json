@@ -16,6 +16,7 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
     "react-scripts": "^5.0.1",
+    "react-toastify": "^10.0.6",
     "recharts": "^2.13.3",
     "tailwind-merge": "^2.5.4",
     "tailwindcss": "^3.4.14",

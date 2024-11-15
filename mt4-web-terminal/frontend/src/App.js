@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import WebTerminal from './components/WebTerminal';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const App = () => {
     const [accountData, setAccountData] = useState(null);
@@ -116,31 +118,45 @@ const App = () => {
 
     return (
         <BrowserRouter>
-            <Layout>
-                <Routes>
-                    <Route 
-                        path="/" 
-                        element={
-                            <Dashboard 
-                                accountData={accountData} 
-                                equityHistory={equityHistory}
-                                connected={connected}
-                                eaConnected={eaConnected}
-                            />
-                        } 
-                    />
-                    <Route 
-                        path="/trading" 
-                        element={
-                            <WebTerminal 
-                                accountData={accountData}
-                                connected={connected}
-                                eaConnected={eaConnected}
-                            />
-                        } 
-                    />
-                </Routes>
-            </Layout>
+            <div className="bg-gray-900 min-h-screen">
+                <Layout>
+                    <Routes>
+                        <Route 
+                            path="/" 
+                            element={
+                                <Dashboard 
+                                    accountData={accountData} 
+                                    equityHistory={equityHistory}
+                                    connected={connected}
+                                    eaConnected={eaConnected}
+                                />
+                            } 
+                        />
+                        <Route 
+                            path="/trading" 
+                            element={
+                                <WebTerminal 
+                                    accountData={accountData}
+                                    connected={connected}
+                                    eaConnected={eaConnected}
+                                />
+                            } 
+                        />
+                    </Routes>
+                </Layout>
+                <ToastContainer
+                    position="bottom-right"
+                    autoClose={2000}
+                    hideProgressBar
+                    newestOnTop={false}
+                    closeOnClick
+                    rtl={false}
+                    pauseOnFocusLoss={false}
+                    draggable={false}
+                    pauseOnHover={false}
+                    theme="dark"
+                />
+            </div>
         </BrowserRouter>
     );
 };

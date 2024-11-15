@@ -111,24 +111,30 @@ app.post('/api/mt4/update', (req, res) => {
 
 // Trade command endpoint
 app.post('/api/trade', (req, res) => {
-    const { action, symbol, risk, sl, tp, comment } = req.body;
+    const { action, symbol, params } = req.body;
     console.log('Trade command received:', req.body);
+
+    if (!action || !symbol) {
+        return res.status(400).json({ error: 'Missing required parameters' });
+    }
 
     // Format command in PineConnector style
     let command = `${action},${symbol}`;
-    if (risk) command += `,risk=${risk}`;
-    if (sl) command += `,sl=${sl}`;
-    if (tp) command += `,tp=${tp}`;
-    if (comment) command += `,comment=${comment}`;
+    
+    // Add parameters if present
+    if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+            command += `,${key}=${value}`;
+        });
+    }
 
-    // Send response immediately
-    res.json({ status: 'command_sent', command });
-
-    // Broadcast command to EA
+    // Broadcast command to all clients
     broadcast({
         type: 'command',
         data: command
     });
+
+    res.json({ status: 'command_sent', command });
 });
 
 // WebSocket connection handler

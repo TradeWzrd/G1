@@ -1,153 +1,64 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { LineChart, XAxis, YAxis, Tooltip, Line, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { TrendingUp, TrendingDown, X, DollarSign, Wallet, Activity, RefreshCw, BarChart2, Clock } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'react-toastify';
-
-const API_URL = 'https://g1-back.onrender.com';
+import 'react-toastify/dist/ReactToastify.css';
 
 const WebTerminal = () => {
     const [connected, setConnected] = useState(false);
     const [accountData, setAccountData] = useState(null);
     const [positions, setPositions] = useState([]);
-    const [symbol, setSymbol] = useState('XAUUSDm');
-    const [risk, setRisk] = useState(0.01);
-    const [sl, setSL] = useState('');
-    const [tp, setTP] = useState('');
-    const [comment, setComment] = useState('');
     const [newOrder, setNewOrder] = useState({
         symbol: 'XAUUSDm',
         lots: 0.01,
-        stopLoss: 0,
-        takeProfit: 0
+        stopLoss: '',
+        takeProfit: '',
+        comment: 'Web Terminal'
     });
-    const [lastUpdate, setLastUpdate] = useState(null);
-    const [tradeHistory, setTradeHistory] = useState([]);
-    const [historyLoading, setHistoryLoading] = useState(false);
-    const [historyError, setHistoryError] = useState('');
-    const [error, setError] = useState(null);
-    const [success, setSuccess] = useState(null);
-    const [eaConnected, setEAConnected] = useState(false);
-
-    // WebSocket reference and reconnection settings
     const ws = useRef(null);
     const reconnectAttempts = useRef(0);
-    const maxReconnectAttempts = 5;
-    const reconnectDelay = 2000; // 2 seconds
-    const reconnectBackoff = 1.5; // Exponential backoff multiplier
 
-    // Format numbers with commas and 2 decimal places
-    const formatCurrency = (value) => {
-        return new Intl.NumberFormat('en-US', {
-            style: 'decimal',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        }).format(value);
-    };
-
-    // Format price with 5 decimal places
-    const formatPrice = (price) => {
-        return new Intl.NumberFormat('en-US', {
-            minimumFractionDigits: 5,
-            maximumFractionDigits: 5,
-        }).format(price);
-    };
-
-    // Connect WebSocket function
-    const connectWebSocket = useCallback(() => {
-        if (ws.current?.readyState === WebSocket.OPEN) {
-            console.log('WebSocket already connected');
-            return;
-        }
-
-        try {
-            ws.current = new WebSocket('wss://g1-back.onrender.com');
+    // Connect to WebSocket
+    useEffect(() => {
+        const connectWebSocket = () => {
+            reconnectAttempts.current++;
+            const wsUrl = process.env.REACT_APP_WS_URL || 'wss://g1-back.onrender.com';
+            ws.current = new WebSocket(wsUrl);
 
             ws.current.onopen = () => {
-                console.log('WebSocket Connected');
+                console.log('WebSocket connected');
                 setConnected(true);
-                setError(null);
-                reconnectAttempts.current = 0; // Reset reconnection attempts on successful connection
-            };
-
-            ws.current.onclose = (event) => {
-                console.log('WebSocket Disconnected', event.code, event.reason);
-                setConnected(false);
-                setEAConnected(false);
-
-                // Only attempt to reconnect if we haven't exceeded max attempts
-                if (reconnectAttempts.current < maxReconnectAttempts) {
-                    const delay = reconnectDelay * Math.pow(reconnectBackoff, reconnectAttempts.current);
-                    console.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
-                    
-                    setTimeout(() => {
-                        reconnectAttempts.current++;
-                        connectWebSocket();
-                    }, delay);
-                } else {
-                    setError('Unable to establish connection. Please refresh the page.');
+                // Only show connection notification on first connect
+                if (reconnectAttempts.current === 1) {
+                    toast.success('Connected to server', { autoClose: 2000 });
                 }
             };
 
+            ws.current.onclose = () => {
+                console.log('WebSocket disconnected');
+                setConnected(false);
+                // Only show disconnection notification if we were previously connected
+                if (connected) {
+                    toast.error('Disconnected from server', { autoClose: 2000 });
+                }
+                setTimeout(connectWebSocket, 5000);
+            };
+
             ws.current.onerror = (error) => {
-                console.error('WebSocket Error:', error);
-                setError('Connection error occurred');
+                console.error('WebSocket error:', error);
+                // Don't show error toast as disconnect will show anyway
             };
 
             ws.current.onmessage = (event) => {
                 try {
-                    const data = JSON.parse(event.data);
-                    console.log('Received data:', data);
-                    
-                    if (data.type === 'update') {
-                        setEAConnected(data.connected);
-                        if (data.data) {
-                            if (data.data.account) {
-                                setAccountData({
-                                    balance: parseFloat(data.data.account.balance || 0),
-                                    equity: parseFloat(data.data.account.equity || 0),
-                                    margin: parseFloat(data.data.account.margin || 0),
-                                    freeMargin: parseFloat(data.data.account.freeMargin || 0)
-                                });
-                            }
-                            if (data.data.positions) {
-                                setPositions(data.data.positions);
-                            }
-                            if (data.data.equityHistory) {
-                                setEquityHistory(data.data.equityHistory);
-                            }
-                            if (data.data.history) {
-                                setLastUpdate(data.data);
-                            }
-                        }
-                        setLastUpdate(new Date());
-                    } else if (data.type === 'history_response' || data.type === 'history_data') {
-                        console.log('Received trade history:', data.data);
-                        setHistoryLoading(false);
-                        setHistoryError('');
-                        setTradeHistory(data.data);
-                    } else if (data.type === 'error') {
-                        console.error('Server error:', data.error);
-                        setError(data.error);
-                        setHistoryLoading(false);
-                        if (data.error.includes('history')) {
-                            setHistoryError(data.error);
-                        }
-                    }
+                    const message = JSON.parse(event.data);
+                    handleWebSocketMessage(message);
                 } catch (error) {
-                    console.error('Error processing message:', error);
-                    setError('Failed to process server response');
-                    setHistoryLoading(false);
+                    console.error('Error parsing WebSocket message:', error);
                 }
             };
-        } catch (error) {
-            console.error('Error creating WebSocket:', error);
-            setError('Failed to create WebSocket connection');
-        }
-    }, []);
+        };
 
-    // Initialize WebSocket connection
-    useEffect(() => {
         connectWebSocket();
+
         return () => {
             if (ws.current) {
                 ws.current.close();
@@ -155,21 +66,50 @@ const WebTerminal = () => {
         };
     }, []);
 
+    // Handle WebSocket messages
+    const handleWebSocketMessage = useCallback((message) => {
+        switch (message.type) {
+            case 'update':
+                if (message.data) {
+                    // Update account data
+                    if (message.data.account) {
+                        setAccountData(message.data.account);
+                    }
+                    // Update positions
+                    if (message.data.positions) {
+                        setPositions(message.data.positions);
+                    }
+                }
+                break;
+            case 'status':
+                setConnected(message.connected);
+                break;
+            default:
+                console.log('Unknown message type:', message.type);
+        }
+    }, []);
+
     // Send trade command
-    const sendTradeCommand = async (action) => {
+    const sendTradeCommand = async (action, ticket = null) => {
         if (!connected) {
             toast.error('Not connected to server');
             return;
         }
 
         try {
+            const params = {
+                risk: parseFloat(newOrder.lots)
+            };
+
+            if (newOrder.stopLoss) params.sl = parseFloat(newOrder.stopLoss);
+            if (newOrder.takeProfit) params.tp = parseFloat(newOrder.takeProfit);
+            if (newOrder.comment) params.comment = newOrder.comment;
+            if (ticket) params.ticket = ticket;
+
             const command = {
                 action,
-                symbol,
-                risk: parseFloat(risk),
-                sl: sl ? parseFloat(sl) : undefined,
-                tp: tp ? parseFloat(tp) : undefined,
-                comment: comment || undefined
+                symbol: newOrder.symbol,
+                params
             };
 
             const response = await fetch('https://g1-back.onrender.com/api/trade', {
@@ -192,698 +132,166 @@ const WebTerminal = () => {
         }
     };
 
-    const handleBuyClick = () => {
-        const params = {
-            risk: newOrder.lots,
-            comment: "Web Terminal"
-        };
-        if (newOrder.stopLoss) params.sl = newOrder.stopLoss;
-        if (newOrder.takeProfit) params.tp = newOrder.takeProfit;
-        
-        sendTradeCommand('buy', newOrder.symbol, params);
-    };
-
-    const handleSellClick = () => {
-        const params = {
-            risk: newOrder.lots,
-            comment: "Web Terminal"
-        };
-        if (newOrder.stopLoss) params.sl = newOrder.stopLoss;
-        if (newOrder.takeProfit) params.tp = newOrder.takeProfit;
-        
-        sendTradeCommand('sell', newOrder.symbol, params);
-    };
-
-    const handleClosePosition = (ticket) => {
-        sendTradeCommand('close', newOrder.symbol, { ticket });
-    };
-
-    const handleCloseAll = async () => {
-        try {
-            const response = await fetch('https://g1-back.onrender.com/api/trade', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    action: 'closeAll'
-                })
-            });
-
-            const data = await response.json();
-            if (data.success) {
-                setSuccess('All positions closed successfully!');
-                setError(null);
-            } else {
-                setError(data.error || 'Failed to close positions');
-            }
-        } catch (error) {
-            console.error('Close all error:', error);
-            setError('Network error: ' + error.message);
-        }
-    };
-
-    const syncHistory = (period, customRange = null) => {
-        if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-            console.error('WebSocket not connected');
-            setError('Not connected to server. Attempting to reconnect...');
-            connectWebSocket();
-            return;
-        }
-
-        setHistoryLoading(true);
-        setHistoryError('');
-        setError('');
-        
-        try {
-            const requestId = Date.now().toString();
-            const command = {
-                type: 'command',
-                id: requestId,
-                command: customRange
-                    ? `GET_HISTORY|custom|${customRange.startDate}|${customRange.endDate}`
-                    : `GET_HISTORY|${period}`
-            };
-            
-            console.log('Sending history request:', command);
-            ws.current.send(JSON.stringify(command));
-            
-            // Set a timeout for the request
-            setTimeout(() => {
-                if (historyLoading) {
-                    setHistoryLoading(false);
-                    setHistoryError('Request timed out. Please try again.');
-                }
-            }, 30000);
-        } catch (error) {
-            console.error('Error sending history request:', error);
-            setHistoryError('Failed to send request: ' + error.message);
-            setHistoryLoading(false);
-        }
-    };
-
-    // Custom tooltip for the chart
-    const CustomTooltip = ({ active, payload, label }) => {
-        if (active && payload && payload.length) {
-            return (
-                <div className="bg-[#1a1f2e] p-3 rounded-lg border border-[#2a3441] shadow-lg">
-                    <p className="text-gray-400 text-sm">{label}</p>
-                    {payload.map((entry, index) => (
-                        <p key={index} className="text-sm font-semibold" style={{ color: entry.color }}>
-                            {entry.name}: ${formatCurrency(entry.value)}
-                        </p>
-                    ))}
-                </div>
-            );
-        }
-        return null;
-    };
-
-    const PositionActions = ({ position, onClose, onModify, onBreakeven }) => {
-        const [isModalOpen, setIsModalOpen] = useState(false);
-        const [modalType, setModalType] = useState(null);
-        const [percentage, setPercentage] = useState(50);
-        const [stopLoss, setStopLoss] = useState(position.sl);
-        const [takeProfit, setTakeProfit] = useState(position.tp);
-        const [breakEvenPips, setBreakEvenPips] = useState(2);
-
-        const handleAction = (action) => {
-            setModalType(action);
-            setIsModalOpen(true);
-        };
-
-        const handleSubmit = () => {
-            switch(modalType) {
-                case 'partial':
-                    onClose(position.ticket, percentage);
-                    break;
-                case 'modify':
-                    onModify(position.ticket, stopLoss, takeProfit);
-                    break;
-                case 'breakeven':
-                    onBreakeven(position.ticket, breakEvenPips);
-                    break;
-            }
-            setIsModalOpen(false);
-        };
-
-        return (
-            <>
-                <div className="flex space-x-2">
-                    <button
-                        onClick={() => onClose(position.ticket)}
-                        className="px-2 py-1 bg-red-500/10 text-red-500 rounded hover:bg-red-500/20"
-                    >
-                        Close
-                    </button>
-                    <button
-                        onClick={() => handleAction('partial')}
-                        className="px-2 py-1 bg-orange-500/10 text-orange-500 rounded hover:bg-orange-500/20"
-                    >
-                        Partial
-                    </button>
-                    <button
-                        onClick={() => handleAction('modify')}
-                        className="px-2 py-1 bg-blue-500/10 text-blue-500 rounded hover:bg-blue-500/20"
-                    >
-                        Modify
-                    </button>
-                    <button
-                        onClick={() => handleAction('breakeven')}
-                        className="px-2 py-1 bg-green-500/10 text-green-500 rounded hover:bg-green-500/20"
-                    >
-                        BE
-                    </button>
-                </div>
-
-                {/* Modal */}
-                {isModalOpen && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
-                        <div className="bg-[#1a1f2e] p-6 rounded-xl border border-[#2a3441] w-96">
-                            <h3 className="text-lg font-bold mb-4">
-                                {modalType === 'partial' && 'Close Partial Position'}
-                                {modalType === 'modify' && 'Modify Position'}
-                                {modalType === 'breakeven' && 'Set Breakeven'}
-                            </h3>
-
-                            <div className="space-y-4">
-                                {modalType === 'partial' && (
-                                    <div>
-                                        <label className="block text-sm text-gray-400 mb-1">
-                                            Close Percentage
-                                        </label>
-                                        <input
-                                            type="range"
-                                            min="1"
-                                            max="99"
-                                            value={percentage}
-                                            onChange={(e) => setPercentage(Number(e.target.value))}
-                                            className="w-full"
-                                        />
-                                        <div className="text-center mt-2">{percentage}%</div>
-                                    </div>
-                                )}
-
-                                {modalType === 'modify' && (
-                                    <>
-                                        <div>
-                                            <label className="block text-sm text-gray-400 mb-1">
-                                                Stop Loss
-                                            </label>
-                                            <input
-                                                type="number"
-                                                value={stopLoss}
-                                                onChange={(e) => setStopLoss(Number(e.target.value))}
-                                                className="w-full bg-[#2a3441] p-2 rounded"
-                                                step="0.00001"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm text-gray-400 mb-1">
-                                                Take Profit
-                                            </label>
-                                            <input
-                                                type="number"
-                                                value={takeProfit}
-                                                onChange={(e) => setTakeProfit(Number(e.target.value))}
-                                                className="w-full bg-[#2a3441] p-2 rounded"
-                                                step="0.00001"
-                                            />
-                                        </div>
-                                    </>
-                                )}
-
-                                {modalType === 'breakeven' && (
-                                    <div>
-                                        <label className="block text-sm text-gray-400 mb-1">
-                                            Pips Buffer
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={breakEvenPips}
-                                            onChange={(e) => setBreakEvenPips(Number(e.target.value))}
-                                            className="w-full bg-[#2a3441] p-2 rounded"
-                                            min="0"
-                                            step="0.1"
-                                        />
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="flex justify-end space-x-4 mt-6">
-                                <button
-                                    onClick={() => setIsModalOpen(false)}
-                                    className="px-4 py-2 bg-gray-500/10 text-gray-400 rounded hover:bg-gray-500/20"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleSubmit}
-                                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                                >
-                                    Confirm
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </>
-        );
-    };
-
-    const TradeHistory = () => {
-        const [period, setPeriod] = useState('today');
-        const [customRange, setCustomRange] = useState({ startDate: '', endDate: '' });
-        const [sortField, setSortField] = useState('closeTime');
-        const [sortDirection, setSortDirection] = useState('desc');
-
-        const sortedHistory = useMemo(() => {
-            return [...tradeHistory].sort((a, b) => {
-                if (sortField === 'closeTime') {
-                    return sortDirection === 'desc' 
-                        ? new Date(b.closeTime) - new Date(a.closeTime)
-                        : new Date(a.closeTime) - new Date(b.closeTime);
-                }
-                return sortDirection === 'desc' 
-                    ? b[sortField] - a[sortField]
-                    : a[sortField] - b[sortField];
-            });
-        }, [tradeHistory, sortField, sortDirection]);
-
-        const handleSort = (field) => {
-            if (field === sortField) {
-                setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-            } else {
-                setSortField(field);
-                setSortDirection('desc');
-            }
-        };
-
-        const formatDateTime = (dateStr) => {
-            return new Date(dateStr).toLocaleString();
-        };
-
-        const getOrderTypeString = (type) => {
-            switch(type) {
-                case 0: return 'Buy';
-                case 1: return 'Sell';
-                case 2: return 'Buy Limit';
-                case 3: return 'Sell Limit';
-                case 4: return 'Buy Stop';
-                case 5: return 'Sell Stop';
-                default: return 'Unknown';
-            }
-        };
-
-        return (
-            <div className="space-y-4">
-                <div className="flex items-center space-x-4">
-                    <select 
-                        className="bg-[#1a1f2e] text-white border border-[#2a3441] rounded px-3 py-2"
-                        value={period}
-                        onChange={(e) => setPeriod(e.target.value)}
-                    >
-                        <option value="all">All History</option>
-                        <option value="today">Today</option>
-                        <option value="last3days">Last 3 Days</option>
-                        <option value="lastWeek">Last Week</option>
-                        <option value="lastMonth">Last Month</option>
-                        <option value="last3Months">Last 3 Months</option>
-                        <option value="last6Months">Last 6 Months</option>
-                        <option value="custom">Custom Period</option>
-                    </select>
-
-                    {period === 'custom' && (
-                        <div className="flex items-center space-x-2">
-                            <input
-                                type="date"
-                                className="bg-[#1a1f2e] text-white border border-[#2a3441] rounded px-3 py-2"
-                                value={customRange.startDate}
-                                onChange={(e) => setCustomRange(prev => ({ ...prev, startDate: e.target.value }))}
-                            />
-                            <span className="text-white">to</span>
-                            <input
-                                type="date"
-                                className="bg-[#1a1f2e] text-white border border-[#2a3441] rounded px-3 py-2"
-                                value={customRange.endDate}
-                                onChange={(e) => setCustomRange(prev => ({ ...prev, endDate: e.target.value }))}
-                            />
-                        </div>
-                    )}
-
-                    <button
-                        onClick={() => syncHistory(period, period === 'custom' ? customRange : null)}
-                        disabled={historyLoading || (period === 'custom' && (!customRange.startDate || !customRange.endDate))}
-                        className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
-                    >
-                        {historyLoading ? (
-                            <span className="animate-spin">⟳</span>
-                        ) : (
-                            <span>Sync History</span>
-                        )}
-                    </button>
-                </div>
-
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-700">
-                        <thead>
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
-                                    onClick={() => handleSort('ticket')}>
-                                    Ticket
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                    Symbol
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                    Type
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
-                                    onClick={() => handleSort('lots')}>
-                                    Volume
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
-                                    onClick={() => handleSort('openPrice')}>
-                                    Open Price
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
-                                    onClick={() => handleSort('closePrice')}>
-                                    Close Price
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
-                                    onClick={() => handleSort('closeTime')}>
-                                    Close Time
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
-                                    onClick={() => handleSort('profit')}>
-                                    Profit
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                    Commission
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                    Swap
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
-                                    onClick={() => handleSort('total')}>
-                                    Total
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-700">
-                            {sortedHistory.map((trade) => {
-                                const total = (trade.profit || 0) + (trade.commission || 0) + (trade.swap || 0);
-                                return (
-                                    <tr key={`${trade.ticket}-${trade.closeTime}`}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                            {trade.ticket}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                            {trade.symbol}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                            {getOrderTypeString(trade.type)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                            {(trade.lots || 0).toFixed(2)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                            {(trade.openPrice || 0).toFixed(5)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                            {(trade.closePrice || 0).toFixed(5)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                            {formatDateTime(trade.closeTime)}
-                                        </td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${trade.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            {(trade.profit || 0).toFixed(2)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                            {(trade.commission || 0).toFixed(2)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                            {(trade.swap || 0).toFixed(2)}
-                                        </td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${total >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            {total.toFixed(2)}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        );
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setNewOrder(prev => ({
+            ...prev,
+            [name]: value
+        }));
     };
 
     return (
-        <div className="p-6 space-y-6 bg-[#0a0f1a] text-white min-h-screen">
-            {/* Header */}
-            <div className="flex justify-between items-center mb-8">
-                <div>
-                    <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
-                        Web Terminal
-                    </h1>
-                    <p className="text-sm text-gray-400 mt-1">Real-time Trading Interface</p>
-                </div>
-                <div className="flex items-center space-x-4">
-                    <div className={`flex items-center px-3 py-1 rounded-full text-sm
-                        ${connected ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
-                        <div className={`w-2 h-2 rounded-full mr-2 ${connected ? 'bg-green-500' : 'bg-red-500'} animate-pulse`}></div>
+        <div className="container mx-auto p-4 bg-gray-900 text-white min-h-screen">
+            <div className="bg-gray-800 shadow-lg rounded-lg p-6">
+                <h1 className="text-2xl font-bold mb-4 text-white">MT4 Web Terminal</h1>
+                
+                {/* Connection Status */}
+                <div className="mb-4">
+                    <span className="font-semibold">Status: </span>
+                    <span className={`${connected ? 'text-green-400' : 'text-red-400'}`}>
                         {connected ? 'Connected' : 'Disconnected'}
-                    </div>
-                    <div className={`flex items-center px-3 py-1 rounded-full text-sm
-                        ${eaConnected ? 'bg-blue-500/10 text-blue-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
-                        <div className={`w-2 h-2 rounded-full mr-2 ${eaConnected ? 'bg-blue-500' : 'bg-yellow-500'} animate-pulse`}></div>
-                        {eaConnected ? 'EA Connected' : 'EA Disconnected'}
-                    </div>
+                    </span>
                 </div>
-            </div>
 
-            {/* Main Grid Layout */}
-            <div className="grid grid-cols-12 gap-6">
-                {/* Trading Panel */}
-                <div className="col-span-12 lg:col-span-4 space-y-6">
-                    {/* New Order Form */}
-                    <div className="bg-[#111827] rounded-xl p-6 border border-[#1f2937]">
-                        <h3 className="text-lg font-bold mb-4">New Order</h3>
+                {/* Account Information */}
+                {accountData && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                        <div className="bg-gray-700 p-3 rounded">
+                            <div className="text-sm text-gray-300">Balance</div>
+                            <div className="font-semibold text-white">{accountData.balance?.toFixed(2)}</div>
+                        </div>
+                        <div className="bg-gray-700 p-3 rounded">
+                            <div className="text-sm text-gray-300">Equity</div>
+                            <div className="font-semibold text-white">{accountData.equity?.toFixed(2)}</div>
+                        </div>
+                        <div className="bg-gray-700 p-3 rounded">
+                            <div className="text-sm text-gray-300">Margin</div>
+                            <div className="font-semibold text-white">{accountData.margin?.toFixed(2)}</div>
+                        </div>
+                        <div className="bg-gray-700 p-3 rounded">
+                            <div className="text-sm text-gray-300">Free Margin</div>
+                            <div className="font-semibold text-white">{accountData.freeMargin?.toFixed(2)}</div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Trading Interface */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <h2 className="text-xl font-semibold mb-4 text-white">New Order</h2>
                         <div className="space-y-4">
-                            <div className="space-y-2">
-                                <label className="text-sm text-gray-400">Symbol</label>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300">Symbol</label>
                                 <input
                                     type="text"
+                                    name="symbol"
                                     value={newOrder.symbol}
-                                    onChange={(e) => setNewOrder({...newOrder, symbol: e.target.value})}
-                                    className="w-full h-10 bg-[#1a1f2e] border border-[#2a3441] rounded-lg px-3 text-sm
-                                             focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
-                                    placeholder="Enter symbol"
+                                    onChange={handleInputChange}
+                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-gray-700 text-white"
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <label className="text-sm text-gray-400">Lots</label>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300">Lots</label>
                                 <input
                                     type="number"
                                     step="0.01"
+                                    name="lots"
                                     value={newOrder.lots}
-                                    onChange={(e) => setNewOrder({...newOrder, lots: parseFloat(e.target.value)})}
-                                    className="w-full h-10 bg-[#1a1f2e] border border-[#2a3441] rounded-lg px-3 text-sm
-                                             focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
-                                    placeholder="Enter lots"
+                                    onChange={handleInputChange}
+                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-gray-700 text-white"
                                 />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm text-gray-400">Stop Loss</label>
-                                    <input
-                                        type="number"
-                                        value={newOrder.stopLoss}
-                                        onChange={(e) => setNewOrder({...newOrder, stopLoss: parseFloat(e.target.value)})}
-                                        className="w-full h-10 bg-[#1a1f2e] border border-[#2a3441] rounded-lg px-3 text-sm
-                                                 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
-                                        placeholder="Stop Loss"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm text-gray-400">Take Profit</label>
-                                    <input
-                                        type="number"
-                                        value={newOrder.takeProfit}
-                                        onChange={(e) => setNewOrder({...newOrder, takeProfit: parseFloat(e.target.value)})}
-                                        className="w-full h-10 bg-[#1a1f2e] border border-[#2a3441] rounded-lg px-3 text-sm
-                                                 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
-                                        placeholder="Take Profit"
-                                    />
-                                </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300">Stop Loss</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    name="stopLoss"
+                                    value={newOrder.stopLoss}
+                                    onChange={handleInputChange}
+                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-gray-700 text-white"
+                                />
                             </div>
-                            <div className="grid grid-cols-2 gap-4 pt-2">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300">Take Profit</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    name="takeProfit"
+                                    value={newOrder.takeProfit}
+                                    onChange={handleInputChange}
+                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-gray-700 text-white"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300">Comment</label>
+                                <input
+                                    type="text"
+                                    name="comment"
+                                    value={newOrder.comment}
+                                    onChange={handleInputChange}
+                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-gray-700 text-white"
+                                />
+                            </div>
+                            <div className="flex space-x-4">
                                 <button
-                                    onClick={handleBuyClick}
-                                    className="h-10 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg
-                                             font-medium flex items-center justify-center gap-2 transition-all"
+                                    onClick={() => sendTradeCommand('buy')}
+                                    className="flex-1 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                                    disabled={!connected}
                                 >
-                                    <TrendingUp className="w-4 h-4" />
                                     Buy
                                 </button>
                                 <button
-                                    onClick={handleSellClick}
-                                    className="h-10 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg
-                                             font-medium flex items-center justify-center gap-2 transition-all"
+                                    onClick={() => sendTradeCommand('sell')}
+                                    className="flex-1 bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+                                    disabled={!connected}
                                 >
-                                    <TrendingDown className="w-4 h-4" />
                                     Sell
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    {/* Account Overview */}
-                    <div className="bg-[#111827] rounded-xl p-6 border border-[#1f2937]">
-                        <h3 className="text-lg font-bold mb-4">Account Overview</h3>
-                        <div className="space-y-4">
-                            {[
-                                { label: 'Balance', value: accountData?.balance || 0, Icon: Wallet, color: 'text-blue-500' },
-                                { label: 'Equity', value: accountData?.equity || 0, Icon: DollarSign, color: 'text-emerald-500' },
-                                { label: 'Margin', value: accountData?.margin || 0, Icon: Activity, color: 'text-purple-500' },
-                                { label: 'Free Margin', value: accountData?.freeMargin || 0, Icon: BarChart2, color: 'text-amber-500' }
-                            ].map((item, index) => (
-                                <div key={index} className="flex items-center justify-between p-3 bg-[#1a1f2e] rounded-lg">
-                                    <div className="flex items-center space-x-3">
-                                        <div className={`p-2 rounded-lg bg-opacity-10 ${item.color}`}>
-                                            <item.Icon className={`w-4 h-4 ${item.color}`} />
-                                        </div>
-                                        <span className="text-gray-400">{item.label}</span>
-                                    </div>
-                                    <span className="font-semibold">${formatCurrency(item.value)}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Market Status */}
-                    <div className="bg-[#111827] rounded-xl p-6 border border-[#1f2937]">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold">Market Status</h3>
-                            <Clock className="w-5 h-5 text-gray-400" />
-                        </div>
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between p-3 bg-[#1a1f2e] rounded-lg">
-                                <span className="text-gray-400">Server Time</span>
-                                <span className="font-semibold">
-                                    {new Date().toLocaleTimeString()}
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between p-3 bg-[#1a1f2e] rounded-lg">
-                                <span className="text-gray-400">Trading Session</span>
-                                <span className="text-green-400 font-semibold">Active</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Chart and Positions */}
-                <div className="col-span-12 lg:col-span-8 space-y-6">
-                    {/* Chart Section */}
-                    <div className="bg-[#111827] rounded-xl p-6 border border-[#1f2937]">
-                        <div className="flex justify-between items-center mb-6">
-                            <div>
-                                <h2 className="text-lg font-bold">Price Chart</h2>
-                                <p className="text-sm text-gray-400">Real-time market visualization</p>
-                            </div>
-                            <div className="flex space-x-4">
-                                <div className="flex items-center">
-                                    <div className="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
-                                    <span className="text-sm text-gray-400">Price</span>
-                                </div>
-                                <div className="flex items-center">
-                                    <div className="w-3 h-3 rounded-full bg-emerald-500 mr-2"></div>
-                                    <span className="text-sm text-gray-400">Volume</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="h-[400px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={equityHistory}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                                    <XAxis 
-                                        dataKey="time" 
-                                        stroke="#6B7280"
-                                        tick={{ fill: '#6B7280' }}
-                                    />
-                                    <YAxis 
-                                        stroke="#6B7280"
-                                        tick={{ fill: '#6B7280' }}
-                                        tickFormatter={(value) => `$${formatCurrency(value)}`}
-                                    />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="price" 
-                                        stroke="#3B82F6"
-                                        strokeWidth={2}
-                                        dot={false}
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
-                    {/* Positions Table */}
-                    <div className="bg-[#111827] rounded-xl p-6 border border-[#1f2937]">
-                        <div className="flex justify-between items-center mb-6">
-                            <div>
-                                <h2 className="text-lg font-bold">Open Positions</h2>
-                                <p className="text-sm text-gray-400">Manage your active trades</p>
-                            </div>
-                            <button
-                                onClick={handleCloseAll}
-                                className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg
-                                         flex items-center gap-2 transition-all"
-                            >
-                                <X className="w-4 h-4" />
-                                Close All
-                            </button>
-                        </div>
+                    {/* Open Positions */}
+                    <div>
+                        <h2 className="text-xl font-semibold mb-4 text-white">Open Positions</h2>
                         <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="text-left text-sm text-gray-400">
-                                        <th className="p-4">Ticket</th>
-                                        <th className="p-4">Symbol</th>
-                                        <th className="p-4">Type</th>
-                                        <th className="p-4">Lots</th>
-                                        <th className="p-4">Open Price</th>
-                                        <th className="p-4">S/L</th>
-                                        <th className="p-4">T/P</th>
-                                        <th className="p-4">Profit</th>
-                                        <th className="p-4">Actions</th>
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-700">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Ticket</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Symbol</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Type</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Lots</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Price</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Profit</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody className="bg-gray-800 divide-y divide-gray-200">
                                     {positions.map((position) => (
-                                        <tr key={position.ticket} className="border-t border-[#2a3441]">
-                                            <td className="p-4">{position.ticket}</td>
-                                            <td className="p-4">{position.symbol}</td>
-                                            <td className="p-4">
-                                                <span className={position.type === 0 ? 'text-green-500' : 'text-red-500'}>
+                                        <tr key={position.ticket}>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{position.ticket}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{position.symbol}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                <span className={position.type === 0 ? 'text-green-400' : 'text-red-400'}>
                                                     {position.type === 0 ? 'BUY' : 'SELL'}
                                                 </span>
                                             </td>
-                                            <td className="p-4">{position.lots}</td>
-                                            <td className="p-4">{position.openPrice}</td>
-                                            <td className="p-4">{position.sl}</td>
-                                            <td className="p-4">{position.tp}</td>
-                                            <td className={`p-4 ${position.profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                                {formatCurrency(position.profit)}
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{position.lots}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{position.openPrice}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                <span className={position.profit >= 0 ? 'text-green-400' : 'text-red-400'}>
+                                                    {position.profit.toFixed(2)}
+                                                </span>
                                             </td>
-                                            <td className="p-4">
-                                                <PositionActions
-                                                    position={position}
-                                                    onClose={handleClosePosition}
-                                                    onModify={(ticket, sl, tp) => sendTradeCommand('modify', newOrder.symbol, { ticket, sl, tp })}
-                                                    onBreakeven={(ticket, pips) => sendTradeCommand('breakeven', newOrder.symbol, { ticket, pips })}
-                                                />
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                <button
+                                                    onClick={() => sendTradeCommand('close', position.ticket)}
+                                                    className="text-red-400 hover:text-red-600"
+                                                >
+                                                    Close
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
@@ -891,31 +299,8 @@ const WebTerminal = () => {
                             </table>
                         </div>
                     </div>
-
-                    {/* Trade History */}
-                    <div className="bg-[#111827] rounded-xl p-6 border border-[#1f2937]">
-                        <div className="flex justify-between items-center mb-6">
-                            <div>
-                                <h2 className="text-lg font-bold">Trade History</h2>
-                                <p className="text-sm text-gray-400">View your past trades</p>
-                            </div>
-                        </div>
-                        <TradeHistory />
-                    </div>
                 </div>
             </div>
-
-            {/* Error/Success Messages */}
-            {error && (
-                <div className="mt-4 p-4 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg">
-                    {error}
-                </div>
-            )}
-            {success && (
-                <div className="mt-4 p-4 bg-green-500/10 text-green-400 border border-green-500/20 rounded-lg">
-                    {success}
-                </div>
-            )}
         </div>
     );
 };
