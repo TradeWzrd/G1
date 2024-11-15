@@ -9,8 +9,7 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const clients = new Set();
-
-// Global variables
+const mt4Clients = new Set();
 const pendingCommands = []; 
 const historyRequests = new Map();
 const HISTORY_REQUEST_TIMEOUT = 30000; // 30 seconds
@@ -418,17 +417,27 @@ app.post('/api/trade', (req, res) => {
     const finalCommand = command.join(',');
     console.log('Sending command to MT4:', finalCommand);
     
-    // Send command to all MT4 clients
-    wss.clients.forEach(client => {
+    // Send command only to MT4 clients
+    let sentToMT4 = false;
+    mt4Clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             const message = JSON.stringify({
                 type: 'command',
                 data: finalCommand
             });
-            console.log('Sending WebSocket message:', message);
+            console.log('Sending command to MT4 client');
             client.send(message);
+            sentToMT4 = true;
         }
     });
+
+    if (!sentToMT4) {
+        console.log('No MT4 clients connected to receive command');
+        return res.status(503).json({ 
+            success: false, 
+            error: 'MT4 client not connected' 
+        });
+    }
 
     res.json({ success: true, command: finalCommand });
 });
@@ -449,9 +458,19 @@ function broadcast(data) {
 }
 
 // WebSocket connection handler
-wss.on('connection', (ws) => {
-    console.log('New client connected');
-    clients.add(ws);
+wss.on('connection', (ws, req) => {
+    console.log('New connection from:', req.url);
+    
+    // Identify if this is an MT4 client or web client
+    const isMT4Client = req.url.includes('/mt4');
+    
+    if (isMT4Client) {
+        console.log('MT4 client connected');
+        mt4Clients.add(ws);
+    } else {
+        console.log('Web client connected');
+        clients.add(ws);
+    }
 
     // Send initial state
     if (lastUpdate) {
@@ -462,27 +481,27 @@ wss.on('connection', (ws) => {
         }));
     }
 
-    // Handle incoming messages
     ws.on('message', (message) => {
         console.log('Received WebSocket message:', message.toString());
         try {
-            const data = JSON.parse(message);
-            
-            // Handle MT4 updates
+            // Handle MT4 status updates
             if (message.toString().startsWith('ACCOUNT|')) {
                 console.log('Received MT4 update:', message.toString());
-                // Broadcast to all clients except the sender
+                // Broadcast to web clients only
                 clients.forEach(client => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                    if (client.readyState === WebSocket.OPEN) {
                         client.send(message.toString());
                     }
                 });
+                return;
             }
+
+            const data = JSON.parse(message);
             
             // Handle history data
             if (data.type === 'history_data') {
                 console.log('Received history data:', data);
-                // Broadcast history data to all clients
+                // Broadcast history data to web clients only
                 clients.forEach(client => {
                     if (client.readyState === WebSocket.OPEN) {
                         client.send(JSON.stringify({
@@ -500,6 +519,7 @@ wss.on('connection', (ws) => {
     ws.on('close', () => {
         console.log('Client disconnected');
         clients.delete(ws);
+        mt4Clients.delete(ws);
         
         // Clean up any pending requests from this client
         for (const [requestId, request] of historyRequests.entries()) {
@@ -512,6 +532,7 @@ wss.on('connection', (ws) => {
     ws.on('error', (error) => {
         console.error('WebSocket error:', error);
         clients.delete(ws);
+        mt4Clients.delete(ws);
     });
 });
 

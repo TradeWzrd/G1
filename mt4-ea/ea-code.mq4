@@ -1,7 +1,9 @@
-#property copyright "Simple Trading Terminal EA"
-#property version   "3.00"
+#property copyright "Copyright 2024"
+#property link      ""
+#property version   "1.00"
 #property strict
 
+// External parameters
 extern string   ServerURL = "https://g1-back.onrender.com";  // Server URL
 extern string   ApiKey = "";                                 // API Key
 extern int      UpdateInterval = 3;                         // Update interval in seconds
@@ -12,6 +14,7 @@ extern int      UpdateInterval = 3;                         // Update interval i
 // Global variables
 bool isConnected = false;
 string lastError = "";
+string wsUrl;  // WebSocket URL
 
 //+------------------------------------------------------------------+
 //| Create simple data string                                         |
@@ -381,27 +384,40 @@ void CloseAllPositions(string symbol, int type = -1) {
 }
 
 //+------------------------------------------------------------------+
-//| Timer function                                                    |
+//| Timer function                                                     |
 //+------------------------------------------------------------------+
-void OnTimer()
-{
-    SendUpdate();
+void OnTimer() {
+    static datetime lastUpdate = 0;
+    datetime currentTime = TimeCurrent();
+    
+    // Only send update if enough time has passed
+    if (currentTime - lastUpdate >= UpdateInterval) {
+        SendUpdate();
+        lastUpdate = currentTime;
+    }
 }
 
 //+------------------------------------------------------------------+
-//| Expert initialization function                                    |
+//| Expert initialization function                                     |
 //+------------------------------------------------------------------+
-int OnInit()
-{
-    EventSetTimer(UpdateInterval);
+int OnInit() {
+    // Convert HTTP URL to WebSocket URL
+    wsUrl = StringReplace(ServerURL, "https://", "wss://");
+    wsUrl = StringReplace(wsUrl, "http://", "ws://");
+    wsUrl = wsUrl + "/mt4";  // Add /mt4 path to identify as MT4 client
+    
+    Print("Connecting to WebSocket server: ", wsUrl);
+    
+    // Set up timer for regular updates
+    EventSetMillisecondTimer(UpdateInterval * 1000);
+    
     return(INIT_SUCCEEDED);
 }
 
 //+------------------------------------------------------------------+
-//| Expert deinitialization function                                 |
+//| Expert deinitialization function                                   |
 //+------------------------------------------------------------------+
-void OnDeinit(const int reason)
-{
+void OnDeinit(const int reason) {
     EventKillTimer();
 }
 
