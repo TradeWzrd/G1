@@ -83,6 +83,35 @@ function parseData(dataString) {
 app.post('/api/mt4/update', express.text(), (req, res) => {
     try {
         console.log('Received MT4 update:', req.body);
+
+        // Check if this is a history update
+        if (req.body.startsWith('HISTORY|')) {
+            const historyData = req.body.substring(8); // Remove 'HISTORY|'
+            console.log('Processing history data:', historyData);
+
+            // Find the latest history request
+            const requestId = [...historyRequests.keys()].find(key => {
+                const request = historyRequests.get(key);
+                return Date.now() - request.timestamp < 30000; // Within 30 seconds
+            });
+
+            if (requestId) {
+                console.log('Found matching request:', requestId);
+                historyRequests.delete(requestId);
+
+                // Broadcast history data to clients
+                broadcast({
+                    type: 'tradeHistory',
+                    data: historyData
+                });
+            } else {
+                console.log('No matching history request found');
+            }
+
+            return res.json({ success: true });
+        }
+
+        // Regular account update
         const data = parseData(req.body);
         
         if (data) {

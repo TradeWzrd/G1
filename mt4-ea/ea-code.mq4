@@ -296,59 +296,44 @@ void ProcessCommand(string cmd)
         string history = GetTradeHistory(period, startDate, endDate);
         Print("Retrieved history: ", history);
         
-        // Send history to server using simple format
+        if(StringLen(history) == 0) {
+            Print("No trade history found for the period");
+            return;
+        }
+        
+        // Send history data in the same format as account updates
+        string historyData = "HISTORY|" + history;
+        Print("Sending history data: ", historyData);
+        
         char post[];
+        StringToCharArray(historyData, post);
+        
+        string headers = "Content-Type: text/plain\r\n";
+        if(StringLen(ApiKey) > 0) {
+            headers += "X-API-Key: " + ApiKey + "\r\n";
+        }
+        
         char result[];
         string result_headers;
-        string headers = "Content-Type: text/plain\r\nX-API-Key: " + ApiKey;
-        
-        Print("Sending history to server");
-        StringToCharArray(history, post);
-        
-        string url = ServerURL + "/api/trade-history/ea";
-        Print("Sending request to: ", url);
         
         int res = WebRequest(
-            "POST",           // Method
-            url,             // URL
-            headers,         // Headers
-            5000,           // Timeout
-            post,           // Data to send
-            result,         // Result data
-            result_headers  // Response headers
+            "POST",
+            ServerURL + "/api/mt4/update",
+            headers,
+            5000,
+            post,
+            result,
+            result_headers
         );
         
         if(res == -1) {
             int error = GetLastError();
             Print("Error sending history - Error code:", error);
-            
-            // Handle common WebRequest errors
-            switch(error) {
-                case 4051: // ERR_FUNCTION_NOT_ALLOWED
-                    Print("WebRequest function not allowed. Please enable in Tools -> Options -> Expert Advisors");
-                    break;
-                case 4075: // ERR_TRADE_SEND_FAILED
-                    Print("Request send failed");
-                    break;
-                case 4019: // ERR_INVALID_POINTER
-                    Print("Invalid data pointer");
-                    break;
-                case 4014: // ERR_TOO_MANY_REQUESTS
-                    Print("Too many requests");
-                    break;
-                case 4015: // ERR_NOT_ENOUGH_RIGHTS
-                    Print("Not enough rights");
-                    break;
-                case 4018: // ERR_NOT_ENOUGH_MEMORY
-                    Print("Not enough memory to complete operation");
-                    break;
-                default:
-                    Print("WebRequest error occurred");
-                    break;
-            }
             return;
         }
         
+        string response = CharArrayToString(result);
+        Print("Server response: ", response);
         Print("History sent successfully");
     }
 }

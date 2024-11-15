@@ -19,6 +19,7 @@ const WebTerminal = () => {
     const [lastUpdate, setLastUpdate] = useState(null);
     const [tradeHistory, setTradeHistory] = useState([]);
     const [historyLoading, setHistoryLoading] = useState(false);
+    const [historyError, setHistoryError] = useState('');
 
     // WebSocket reference and reconnection settings
     const ws = useRef(null);
@@ -113,8 +114,9 @@ const WebTerminal = () => {
                         }
                         setLastUpdate(new Date());
                     } else if (data.type === 'tradeHistory') {
-                        // Handle trade history response
-                        console.log('Processing trade history:', data.data);
+                        setHistoryLoading(false);
+                        setHistoryError('');
+                        
                         if (data.data) {
                             const trades = data.data.split(';').filter(Boolean).map(trade => {
                                 const [
@@ -132,16 +134,19 @@ const WebTerminal = () => {
                                     closeTime,
                                     profit: parseFloat(profit),
                                     commission: parseFloat(commission),
-                                    swap: parseFloat(swap)
+                                    swap: parseFloat(swap),
+                                    total: parseFloat(profit) + parseFloat(commission) + parseFloat(swap)
                                 };
                             });
                             setTradeHistory(trades);
                         }
-                        setHistoryLoading(false);
                     } else if (data.type === 'error') {
                         console.error('Server error:', data.error);
                         setError(data.error);
                         setHistoryLoading(false);
+                        if (data.error.includes('history')) {
+                            setHistoryError(data.error);
+                        }
                     }
                 } catch (error) {
                     console.error('Error processing message:', error);
@@ -281,6 +286,7 @@ const WebTerminal = () => {
         }
 
         setHistoryLoading(true);
+        setHistoryError('');
         setError('');
         
         try {
@@ -298,12 +304,12 @@ const WebTerminal = () => {
             setTimeout(() => {
                 if (historyLoading) {
                     setHistoryLoading(false);
-                    setError('Request timed out. Please try again.');
+                    setHistoryError('Request timed out. Please try again.');
                 }
             }, 30000);
         } catch (error) {
             console.error('Error sending history request:', error);
-            setError('Failed to send request: ' + error.message);
+            setHistoryError('Failed to send request: ' + error.message);
             setHistoryLoading(false);
         }
     };
