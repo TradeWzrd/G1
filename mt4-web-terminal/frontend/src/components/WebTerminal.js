@@ -118,33 +118,103 @@ const WebTerminal = () => {
 
     // Initialize WebSocket connection
     useEffect(() => {
-        connectWebSocket();
+        ws.current = new WebSocket('wss://g1-back.onrender.com');
 
-        // Cleanup function
+        ws.current.onopen = () => {
+            console.log('WebSocket Connected');
+            setConnected(true);
+            setError(null);
+        };
+
+        ws.current.onclose = () => {
+            console.log('WebSocket Disconnected');
+            setConnected(false);
+            setError('Connection lost. Reconnecting...');
+            
+            // Attempt to reconnect
+            setTimeout(() => {
+                if (ws.current?.readyState === WebSocket.CLOSED) {
+                    console.log('Attempting to reconnect...');
+                    ws.current = new WebSocket('wss://g1-back.onrender.com');
+                }
+            }, 5000);
+        };
+
+        ws.current.onerror = (error) => {
+            console.error('WebSocket Error:', error);
+            setError('Connection error occurred');
+        };
+
+        ws.current.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                console.log('Received message:', data);
+
+                if (data.type === 'update' || data.type === 'status') {
+                    setEAConnected(data.connected);
+                    if (data.data) {
+                        if (data.data.account) {
+                            setAccountData(data.data.account);
+                        }
+                        if (data.data.positions) {
+                            setPositions(data.data.positions);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error processing message:', error);
+            }
+        };
+
         return () => {
             if (ws.current) {
                 ws.current.close();
-                ws.current = null;
             }
         };
-    }, [connectWebSocket]);
+    }, []);
 
-    // Custom tooltip for the chart
-    const CustomTooltip = ({ active, payload, label }) => {
-        if (active && payload && payload.length) {
-            return (
-                <div className="bg-[#1a1f2e] p-3 rounded-lg border border-[#2a3441] shadow-lg">
-                    <p className="text-gray-400 text-sm">{label}</p>
-                    {payload.map((entry, index) => (
-                        <p key={index} className="text-sm font-semibold" style={{ color: entry.color }}>
-                            {entry.name}: ${formatCurrency(entry.value)}
-                        </p>
-                    ))}
-                </div>
-            );
+    const handleClosePosition = useCallback((ticket, percentage = 100) => {
+        if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
+            console.error('WebSocket not connected');
+            return;
         }
-        return null;
-    };
+        
+        const command = percentage === 100 
+            ? `CLOSE,${ticket}`
+            : `CLOSE,${ticket},${percentage}`;
+            
+        console.log('Sending close command:', command);
+        ws.current.send(JSON.stringify({
+            type: 'command',
+            data: command
+        }));
+    }, []);
+
+    const handleModifyPosition = useCallback((ticket, sl, tp) => {
+        if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
+            console.error('WebSocket not connected');
+            return;
+        }
+        
+        console.log('Sending modify command:', `MODIFY,${ticket},${sl},${tp}`);
+        ws.current.send(JSON.stringify({
+            type: 'command',
+            data: `MODIFY,${ticket},${sl},${tp}`
+        }));
+    }, []);
+
+    const handleBreakeven = useCallback((ticket, pips = 0) => {
+        if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
+            console.error('WebSocket not connected');
+            return;
+        }
+        
+        console.log('Sending breakeven command:', `BREAKEVEN,${ticket},${pips}`);
+        ws.current.send(JSON.stringify({
+            type: 'command',
+            data: `BREAKEVEN,${ticket},${pips}`
+        }));
+    }, []);
 
     // Handle trade execution
     const executeTrade = async (type) => {
@@ -185,37 +255,6 @@ const WebTerminal = () => {
         }
     };
 
-    const handleClosePosition = useCallback((ticket, percentage = 100) => {
-        if (!ws.current) return;
-        
-        const command = percentage === 100 
-            ? `CLOSE,${ticket}`
-            : `CLOSE,${ticket},${percentage}`;
-            
-        ws.current.send(JSON.stringify({
-            type: 'command',
-            data: command
-        }));
-    }, []);
-
-    const handleModifyPosition = useCallback((ticket, sl, tp) => {
-        if (!ws.current) return;
-        
-        ws.current.send(JSON.stringify({
-            type: 'command',
-            data: `MODIFY,${ticket},${sl},${tp}`
-        }));
-    }, []);
-
-    const handleBreakeven = useCallback((ticket, pips = 0) => {
-        if (!ws.current) return;
-        
-        ws.current.send(JSON.stringify({
-            type: 'command',
-            data: `BREAKEVEN,${ticket},${pips}`
-        }));
-    }, []);
-
     const handleCloseAll = async () => {
         try {
             const response = await fetch('https://g1-back.onrender.com/api/trade', {
@@ -239,6 +278,23 @@ const WebTerminal = () => {
             console.error('Close all error:', error);
             setError('Network error: ' + error.message);
         }
+    };
+
+    // Custom tooltip for the chart
+    const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            return (
+                <div className="bg-[#1a1f2e] p-3 rounded-lg border border-[#2a3441] shadow-lg">
+                    <p className="text-gray-400 text-sm">{label}</p>
+                    {payload.map((entry, index) => (
+                        <p key={index} className="text-sm font-semibold" style={{ color: entry.color }}>
+                            {entry.name}: ${formatCurrency(entry.value)}
+                        </p>
+                    ))}
+                </div>
+            );
+        }
+        return null;
     };
 
     const PositionActions = ({ position, onClose, onModify, onBreakeven }) => {

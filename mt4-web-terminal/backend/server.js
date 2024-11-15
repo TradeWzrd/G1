@@ -212,6 +212,22 @@ wss.on('connection', (ws) => {
         }));
     }
 
+    // Handle incoming messages from clients
+    ws.on('message', (message) => {
+        try {
+            const data = JSON.parse(message);
+            console.log('Received WebSocket message:', data);
+
+            if (data.type === 'command') {
+                // Add command to pending queue
+                pendingCommands.push(data.data);
+                console.log('Added command to queue:', data.data);
+            }
+        } catch (error) {
+            console.error('Error processing WebSocket message:', error);
+        }
+    });
+
     ws.on('close', () => {
         console.log('Client disconnected');
         clients.delete(ws);
