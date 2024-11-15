@@ -16,6 +16,7 @@ const WebTerminal = () => {
         stopLoss: 0,
         takeProfit: 0
     });
+    const [lastUpdate, setLastUpdate] = useState(null);
 
     // WebSocket reference and reconnection settings
     const ws = useRef(null);
@@ -103,6 +104,9 @@ const WebTerminal = () => {
                             }
                             if (data.data.equityHistory) {
                                 setEquityHistory(data.data.equityHistory);
+                            }
+                            if (data.data.history) {
+                                setLastUpdate(data.data);
                             }
                         }
                     }
@@ -449,6 +453,137 @@ const WebTerminal = () => {
         );
     };
 
+    const TradeHistory = ({ history }) => {
+        const [sortField, setSortField] = useState('closeTime');
+        const [sortDirection, setSortDirection] = useState('desc');
+        
+        const sortedHistory = history?.sort((a, b) => {
+            if (sortField === 'closeTime') {
+                return sortDirection === 'desc' 
+                    ? new Date(b.closeTime) - new Date(a.closeTime)
+                    : new Date(a.closeTime) - new Date(b.closeTime);
+            }
+            return sortDirection === 'desc' 
+                ? b[sortField] - a[sortField]
+                : a[sortField] - b[sortField];
+        });
+
+        const handleSort = (field) => {
+            if (field === sortField) {
+                setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+            } else {
+                setSortField(field);
+                setSortDirection('desc');
+            }
+        };
+
+        const formatDateTime = (dateStr) => {
+            return new Date(dateStr).toLocaleString();
+        };
+
+        const getOrderTypeString = (type) => {
+            switch(type) {
+                case 0: return 'Buy';
+                case 1: return 'Sell';
+                case 2: return 'Buy Limit';
+                case 3: return 'Sell Limit';
+                case 4: return 'Buy Stop';
+                case 5: return 'Sell Stop';
+                default: return 'Unknown';
+            }
+        };
+
+        return (
+            <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-700">
+                    <thead>
+                        <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                                onClick={() => handleSort('ticket')}>
+                                Ticket
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                Symbol
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                Type
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                                onClick={() => handleSort('lots')}>
+                                Volume
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                                onClick={() => handleSort('openPrice')}>
+                                Open Price
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                                onClick={() => handleSort('closePrice')}>
+                                Close Price
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                                onClick={() => handleSort('closeTime')}>
+                                Close Time
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                                onClick={() => handleSort('profit')}>
+                                Profit
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                Commission
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                Swap
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                                onClick={() => handleSort('total')}>
+                                Total
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-700">
+                        {sortedHistory?.map((trade) => (
+                            <tr key={`${trade.ticket}-${trade.closeTime}`}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                    {trade.ticket}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                    {trade.symbol}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                    {getOrderTypeString(trade.type)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                    {trade.lots.toFixed(2)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                    {trade.openPrice.toFixed(5)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                    {trade.closePrice.toFixed(5)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                    {formatDateTime(trade.closeTime)}
+                                </td>
+                                <td className={`px-6 py-4 whitespace-nowrap text-sm ${trade.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {trade.profit.toFixed(2)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                    {trade.commission.toFixed(2)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                    {trade.swap.toFixed(2)}
+                                </td>
+                                <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${trade.total >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {trade.total.toFixed(2)}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        );
+    };
+
     return (
         <div className="p-6 space-y-6 bg-[#0a0f1a] text-white min-h-screen">
             {/* Header */}
@@ -701,6 +836,17 @@ const WebTerminal = () => {
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+
+                    {/* Trade History */}
+                    <div className="bg-[#111827] rounded-xl p-6 border border-[#1f2937]">
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h2 className="text-lg font-bold">Trade History</h2>
+                                <p className="text-sm text-gray-400">View your past trades</p>
+                            </div>
+                        </div>
+                        <TradeHistory history={lastUpdate?.history || []} />
                     </div>
                 </div>
             </div>

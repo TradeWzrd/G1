@@ -18,6 +18,7 @@ app.use(morgan('dev'));
 const clients = new Set();
 let lastUpdate = null;
 let eaConnected = false;
+let lastEAUpdate = null;
 
 // Store pending commands
 let pendingCommands = [];
@@ -114,6 +115,99 @@ app.post('/api/mt4/update', express.text(), (req, res) => {
             error: error.message,
             commands: []
         });
+    }
+});
+
+// Process EA data
+app.post('/api/ea-data', (req, res) => {
+    const data = req.body.data;
+    if (!data) {
+        return res.status(400).json({ error: 'No data provided' });
+    }
+
+    try {
+        // Split data into sections
+        const [accountSection, positionsSection, historySection] = data.split('|POSITIONS|');
+        const [_, accountData] = accountSection.split('|');
+        const [balance, equity, margin, freeMargin] = accountData.split(';');
+
+        // Process account data
+        const account = {
+            balance: parseFloat(balance),
+            equity: parseFloat(equity),
+            margin: parseFloat(margin),
+            freeMargin: parseFloat(freeMargin)
+        };
+
+        // Process positions
+        const positions = [];
+        if (positionsSection) {
+            const [posData, histData] = positionsSection.split('|HISTORY|');
+            if (posData) {
+                const positionStrings = posData.split(';');
+                positionStrings.forEach(pos => {
+                    if (pos) {
+                        const [ticket, symbol, type, lots, openPrice, sl, tp, profit] = pos.split(',');
+                        positions.push({
+                            ticket: parseInt(ticket),
+                            symbol,
+                            type: parseInt(type),
+                            lots: parseFloat(lots),
+                            openPrice: parseFloat(openPrice),
+                            sl: parseFloat(sl),
+                            tp: parseFloat(tp),
+                            profit: parseFloat(profit)
+                        });
+                    }
+                });
+            }
+        }
+
+        // Process history
+        const history = [];
+        if (historySection) {
+            const historyStrings = historySection.split(';');
+            historyStrings.forEach(hist => {
+                if (hist) {
+                    const [ticket, symbol, type, lots, openPrice, closePrice, openTime, closeTime, profit, commission, swap] = hist.split(',');
+                    history.push({
+                        ticket: parseInt(ticket),
+                        symbol,
+                        type: parseInt(type),
+                        lots: parseFloat(lots),
+                        openPrice: parseFloat(openPrice),
+                        closePrice: parseFloat(closePrice),
+                        openTime,
+                        closeTime,
+                        profit: parseFloat(profit),
+                        commission: parseFloat(commission),
+                        swap: parseFloat(swap),
+                        total: parseFloat(profit) + parseFloat(commission) + parseFloat(swap)
+                    });
+                }
+            });
+        }
+
+        // Update last update and broadcast to clients
+        lastUpdate = { account, positions, history };
+        eaConnected = true;
+        lastEAUpdate = Date.now();
+
+        // Broadcast update to all connected clients
+        wss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                    type: 'update',
+                    connected: true,
+                    data: lastUpdate
+                }));
+            }
+        });
+
+        res.json({ status: 'ok' });
+    } catch (error) {
+        console.error('Error processing EA data:', error);
+        res.status(500).json({ error: 'Error processing data' });
     }
 });
 

@@ -15,7 +15,7 @@ string lastError = "";
 //+------------------------------------------------------------------+
 string CreateUpdateString()
 {
-    // Format: ACCOUNT|balance;equity;margin;freeMargin|POSITIONS|ticket,symbol,type,lots,openPrice,sl,tp,profit;next_position...
+    // Format: ACCOUNT|balance;equity;margin;freeMargin|POSITIONS|ticket,symbol,type,lots,openPrice,sl,tp,profit|HISTORY|ticket,symbol,type,lots,openPrice,closePrice,openTime,closeTime,profit
     string data = "ACCOUNT|";
     
     // Account data
@@ -42,6 +42,31 @@ string CreateUpdateString()
             data += DoubleToStr(OrderProfit(), 2);
             
             firstPosition = false;
+        }
+    }
+    
+    // Add history
+    data += "|HISTORY|";
+    bool firstHistory = true;
+    
+    // Get history for last 100 closed trades
+    for(int i = 0; i < OrdersHistoryTotal(); i++) {
+        if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) {
+            if(!firstHistory) data += ";";
+            
+            data += OrderTicket() + ",";
+            data += OrderSymbol() + ",";
+            data += OrderType() + ",";
+            data += DoubleToStr(OrderLots(), 2) + ",";
+            data += DoubleToStr(OrderOpenPrice(), 5) + ",";
+            data += DoubleToStr(OrderClosePrice(), 5) + ",";
+            data += TimeToStr(OrderOpenTime(), TIME_DATE|TIME_SECONDS) + ",";
+            data += TimeToStr(OrderCloseTime(), TIME_DATE|TIME_SECONDS) + ",";
+            data += DoubleToStr(OrderProfit(), 2) + ",";
+            data += DoubleToStr(OrderCommission(), 2) + ",";
+            data += DoubleToStr(OrderSwap(), 2);
+            
+            firstHistory = false;
         }
     }
     
@@ -422,4 +447,3 @@ void OnTick()
     if(lastError != "") status += "Error: " + lastError + "\n";
     Comment(status);
 }
-```
