@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Alert, AlertDescription } from './ui/alert';
-import { RefreshCw, X, Edit2, TrendingUp, TrendingDown } from 'lucide-react';
+import { RefreshCw, X, Edit2, TrendingUp, TrendingDown, DollarSign, BarChart2 } from 'lucide-react';
 
 const TradingPanel = ({ positions = [] }) => {
     const [newOrder, setNewOrder] = useState({
@@ -143,39 +143,52 @@ const TradingPanel = ({ positions = [] }) => {
     };
 
     return (
-        <div className="space-y-6">
-            {/* New Order Panel */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>New Market Order</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
+        <div className="p-6 space-y-6 bg-[#0a0f1a] text-white min-h-screen">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-8">
+                <div>
+                    <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
+                        Trading Terminal
+                    </h1>
+                    <p className="text-sm text-gray-400 mt-1">Execute and manage your trades</p>
+                </div>
+                <div className="flex items-center space-x-2 text-sm">
+                    <div className="flex items-center px-3 py-1 bg-green-500/10 text-green-500 rounded-full">
+                        <div className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
+                        Market Open
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-12 gap-6">
+                {/* Trading Form */}
+                <div className="col-span-12 lg:col-span-4 space-y-6">
+                    <div className="bg-[#111827] rounded-xl p-6 border border-[#1f2937]">
+                        <h3 className="text-lg font-bold mb-6">New Order</h3>
+                        
                         {/* Symbol Input */}
-                        <div className="space-y-2">
-                            <div className="flex gap-2">
+                        <div className="space-y-4 mb-6">
+                            <div>
+                                <label className="text-sm text-gray-400 mb-1 block">Symbol</label>
                                 <Input
+                                    type="text"
                                     value={symbolInput}
                                     onChange={handleSymbolInputChange}
-                                    placeholder="Enter symbol"
-                                    className="flex-grow"
+                                    placeholder="Enter symbol..."
+                                    className="bg-[#1a1f2e] border-[#2a3441] text-white"
                                 />
-                                <select
-                                    className="p-2 border rounded"
-                                    onChange={(e) => handleSymbolSelect(symbolInput + e.target.value)}
-                                >
-                                    <option value="">No Suffix</option>
-                                    {symbolSuffixes.map(suffix => (
-                                        <option key={suffix} value={suffix}>{suffix || 'None'}</option>
-                                    ))}
-                                </select>
                             </div>
-                            <div className="flex gap-2 flex-wrap">
+                            
+                            {/* Common Symbols */}
+                            <div className="flex flex-wrap gap-2">
                                 {commonSymbols.map(symbol => (
                                     <button
                                         key={symbol}
                                         onClick={() => handleSymbolSelect(symbol)}
-                                        className="px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+                                        className={`px-3 py-1 rounded-lg text-sm transition-all duration-200 
+                                            ${symbolInput === symbol 
+                                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
+                                                : 'bg-[#1a1f2e] text-gray-400 hover:text-gray-200 border border-[#2a3441]'}`}
                                     >
                                         {symbol}
                                     </button>
@@ -184,131 +197,126 @@ const TradingPanel = ({ positions = [] }) => {
                         </div>
 
                         {/* Order Details */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <Input
-                                type="number"
-                                step="0.01"
-                                min="0.01"
-                                value={newOrder.lots}
-                                onChange={(e) => setNewOrder({...newOrder, lots: parseFloat(e.target.value)})}
-                                placeholder="Lots"
-                            />
-                            <Input
-                                type="number"
-                                step="0.00001"
-                                value={newOrder.stopLoss}
-                                onChange={(e) => setNewOrder({...newOrder, stopLoss: parseFloat(e.target.value)})}
-                                placeholder="Stop Loss"
-                            />
-                            <Input
-                                type="number"
-                                step="0.00001"
-                                value={newOrder.takeProfit}
-                                onChange={(e) => setNewOrder({...newOrder, takeProfit: parseFloat(e.target.value)})}
-                                placeholder="Take Profit"
-                            />
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-sm text-gray-400 mb-1 block">Lots</label>
+                                <Input
+                                    type="number"
+                                    value={newOrder.lots}
+                                    onChange={(e) => setNewOrder({ ...newOrder, lots: e.target.value })}
+                                    step="0.01"
+                                    min="0.01"
+                                    className="bg-[#1a1f2e] border-[#2a3441] text-white"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-sm text-gray-400 mb-1 block">Stop Loss</label>
+                                <Input
+                                    type="number"
+                                    value={newOrder.stopLoss}
+                                    onChange={(e) => setNewOrder({ ...newOrder, stopLoss: e.target.value })}
+                                    step="0.00001"
+                                    className="bg-[#1a1f2e] border-[#2a3441] text-white"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-sm text-gray-400 mb-1 block">Take Profit</label>
+                                <Input
+                                    type="number"
+                                    value={newOrder.takeProfit}
+                                    onChange={(e) => setNewOrder({ ...newOrder, takeProfit: e.target.value })}
+                                    step="0.00001"
+                                    className="bg-[#1a1f2e] border-[#2a3441] text-white"
+                                />
+                            </div>
                         </div>
 
-                        {/* Buy/Sell Buttons */}
-                        <div className="flex gap-4">
-                            <Button 
-                                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                        {/* Action Buttons */}
+                        <div className="grid grid-cols-2 gap-4 mt-6">
+                            <Button
                                 onClick={() => executeMarketOrder(0)}
+                                className="bg-green-500 hover:bg-green-600 text-white flex items-center justify-center gap-2 py-5"
                             >
-                                <TrendingUp className="w-4 h-4 mr-2" />
+                                <TrendingUp className="w-4 h-4" />
                                 Buy
                             </Button>
-                            <Button 
-                                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                            <Button
                                 onClick={() => executeMarketOrder(1)}
+                                className="bg-red-500 hover:bg-red-600 text-white flex items-center justify-center gap-2 py-5"
                             >
-                                <TrendingDown className="w-4 h-4 mr-2" />
+                                <TrendingDown className="w-4 h-4" />
                                 Sell
                             </Button>
                         </div>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
 
-            {/* Open Positions */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Open Positions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
-                        {/* Close All Buttons */}
-                        <div className="flex gap-2 flex-wrap">
-                            <Button 
-                                variant="destructive" 
-                                onClick={() => handleCloseAll()}
+                {/* Open Positions */}
+                <div className="col-span-12 lg:col-span-8">
+                    <div className="bg-[#111827] rounded-xl p-6 border border-[#1f2937]">
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 className="text-lg font-bold">Open Positions</h3>
+                                <p className="text-sm text-gray-400">Manage your active trades</p>
+                            </div>
+                            <Button
+                                onClick={() => window.location.reload()}
+                                className="bg-[#1a1f2e] hover:bg-[#2a3441] text-gray-400 hover:text-white"
                             >
-                                Close All Positions
-                            </Button>
-                            <Button 
-                                variant="outline" 
-                                onClick={() => handleCloseAll(0)}
-                            >
-                                Close All Buys
-                            </Button>
-                            <Button 
-                                variant="outline" 
-                                onClick={() => handleCloseAll(1)}
-                            >
-                                Close All Sells
+                                <RefreshCw className="w-4 h-4" />
                             </Button>
                         </div>
 
-                        {/* Positions Table */}
                         <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Symbol</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lots</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Open Price</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S/L</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">T/P</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Profit</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="text-gray-400 border-b border-[#1f2937]">
+                                        <th className="text-left p-3 font-medium">Ticket</th>
+                                        <th className="text-left p-3 font-medium">Symbol</th>
+                                        <th className="text-left p-3 font-medium">Type</th>
+                                        <th className="text-right p-3 font-medium">Lots</th>
+                                        <th className="text-right p-3 font-medium">Open Price</th>
+                                        <th className="text-right p-3 font-medium">S/L</th>
+                                        <th className="text-right p-3 font-medium">T/P</th>
+                                        <th className="text-right p-3 font-medium">Profit</th>
+                                        <th className="text-center p-3 font-medium">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
+                                <tbody>
                                     {positions.map((position) => (
-                                        <tr key={position.ticket}>
-                                            <td className="px-6 py-4 whitespace-nowrap">{position.ticket}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">{position.symbol}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                {position.type === 0 ? 
-                                                    <span className="text-green-600">Buy</span> : 
-                                                    <span className="text-red-600">Sell</span>
-                                                }
+                                        <tr key={position.ticket} className="border-b border-[#1f2937] hover:bg-[#1a1f2e]">
+                                            <td className="p-3">{position.ticket}</td>
+                                            <td className="p-3">{position.symbol}</td>
+                                            <td className="p-3">
+                                                <span className={`px-2 py-1 rounded-full text-xs
+                                                    ${position.type === 0 
+                                                        ? 'bg-green-500/20 text-green-400' 
+                                                        : 'bg-red-500/20 text-red-400'}`}>
+                                                    {position.type === 0 ? 'BUY' : 'SELL'}
+                                                </span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">{formatLots(position.lots)}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">{formatPrice(position.openPrice)}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">{formatPrice(position.stopLoss)}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">{formatPrice(position.takeProfit)}</td>
-                                            <td className={`px-6 py-4 whitespace-nowrap ${position.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                {Number(position.profit).toFixed(2)}
+                                            <td className="p-3 text-right">{formatLots(position.lots)}</td>
+                                            <td className="p-3 text-right">{formatPrice(position.openPrice)}</td>
+                                            <td className="p-3 text-right">{formatPrice(position.stopLoss)}</td>
+                                            <td className="p-3 text-right">{formatPrice(position.takeProfit)}</td>
+                                            <td className={`p-3 text-right font-medium
+                                                ${position.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                ${formatPrice(position.profit)}
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="flex gap-2">
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
+                                            <td className="p-3 text-center">
+                                                <div className="flex justify-center gap-2">
+                                                    <button
                                                         onClick={() => setModifyOrder(position)}
+                                                        className="p-1 hover:bg-[#2a3441] rounded-lg transition-colors"
                                                     >
-                                                        <Edit2 className="w-4 h-4" />
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="destructive"
+                                                        <Edit2 className="w-4 h-4 text-blue-400" />
+                                                    </button>
+                                                    <button
                                                         onClick={() => handleClosePosition(position.ticket)}
+                                                        className="p-1 hover:bg-[#2a3441] rounded-lg transition-colors"
                                                     >
-                                                        <X className="w-4 h-4" />
-                                                    </Button>
+                                                        <X className="w-4 h-4 text-red-400" />
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -317,72 +325,18 @@ const TradingPanel = ({ positions = [] }) => {
                             </table>
                         </div>
                     </div>
-                </CardContent>
-            </Card>
-
-            {/* Modify Position Modal */}
-            {modifyOrder && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                    <Card className="w-96">
-                        <CardHeader>
-                            <CardTitle>Modify Position #{modifyOrder.ticket}</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-4">
-                                <Input
-                                    type="number"
-                                    step="0.00001"
-                                    value={modifyOrder.stopLoss}
-                                    onChange={(e) => setModifyOrder({
-                                        ...modifyOrder,
-                                        stopLoss: parseFloat(e.target.value)
-                                    })}
-                                    placeholder="Stop Loss"
-                                />
-                                <Input
-                                    type="number"
-                                    step="0.00001"
-                                    value={modifyOrder.takeProfit}
-                                    onChange={(e) => setModifyOrder({
-                                        ...modifyOrder,
-                                        takeProfit: parseFloat(e.target.value)
-                                    })}
-                                    placeholder="Take Profit"
-                                />
-                                <div className="flex gap-2">
-                                    <Button
-                                        className="flex-1"
-                                        onClick={() => handleModifyPosition(
-                                            modifyOrder.ticket,
-                                            modifyOrder.stopLoss,
-                                            modifyOrder.takeProfit
-                                        )}
-                                    >
-                                        Save Changes
-                                    </Button>
-                                    <Button
-                                        className="flex-1"
-                                        variant="outline"
-                                        onClick={() => setModifyOrder(null)}
-                                    >
-                                        Cancel
-                                    </Button>
-                                </div>
-                            </div>
-                        </CardContent>
-                        </Card>
                 </div>
-            )}
+            </div>
 
             {/* Error/Success Messages */}
             {error && (
-                <Alert variant="destructive" className="mt-4">
+                <Alert className="mt-4 bg-red-500/10 text-red-400 border border-red-500/20">
                     <AlertDescription>{error}</AlertDescription>
                 </Alert>
             )}
             {success && (
-                <Alert className="mt-4 bg-green-50 border-green-200">
-                    <AlertDescription className="text-green-800">{success}</AlertDescription>
+                <Alert className="mt-4 bg-green-500/10 text-green-400 border border-green-500/20">
+                    <AlertDescription>{success}</AlertDescription>
                 </Alert>
             )}
         </div>

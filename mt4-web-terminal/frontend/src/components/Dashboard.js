@@ -1,5 +1,5 @@
 import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { 
     LineChart, 
     Users, 
@@ -8,7 +8,9 @@ import {
     ArrowDownRight,
     Server,
     Wallet,
-    Activity 
+    Activity,
+    TrendingUp,
+    DollarSign 
 } from 'lucide-react';
 
 const Dashboard = ({ accountData, equityHistory }) => {
@@ -18,30 +20,116 @@ const Dashboard = ({ accountData, equityHistory }) => {
         return isNaN(numValue) ? 0 : numValue;
     };
 
+    // Format numbers with commas and 2 decimal places
+    const formatCurrency = (value) => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'decimal',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }).format(value);
+    };
+
+    // Custom tooltip for the chart
+    const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            return (
+                <div className="bg-[#1a1f2e] p-3 rounded-lg border border-[#2a3441] shadow-lg">
+                    <p className="text-gray-400 text-sm">{label}</p>
+                    {payload.map((entry, index) => (
+                        <p key={index} className="text-sm font-semibold" style={{ color: entry.color }}>
+                            {entry.name}: ${formatCurrency(entry.value)}
+                        </p>
+                    ))}
+                </div>
+            );
+        }
+        return null;
+    };
+
+    const stats = [
+        { 
+            title: 'Balance', 
+            value: getStatValue(accountData?.balance), 
+            Icon: Wallet,
+            color: 'text-blue-500',
+            bgGradient: 'from-blue-500/10 to-transparent'
+        },
+        { 
+            title: 'Equity', 
+            value: getStatValue(accountData?.equity), 
+            Icon: CreditCard,
+            color: 'text-emerald-500',
+            bgGradient: 'from-emerald-500/10 to-transparent'
+        },
+        { 
+            title: 'Margin', 
+            value: getStatValue(accountData?.margin), 
+            Icon: Activity,
+            color: 'text-purple-500',
+            bgGradient: 'from-purple-500/10 to-transparent'
+        },
+        { 
+            title: 'Free Margin', 
+            value: getStatValue(accountData?.freeMargin), 
+            Icon: LineChart,
+            color: 'text-amber-500',
+            bgGradient: 'from-amber-500/10 to-transparent'
+        }
+    ];
+
     return (
-        <div className="p-6 space-y-6 bg-[#0a0f1a] text-white">
+        <div className="p-6 space-y-6 bg-[#0a0f1a] text-white min-h-screen">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-8">
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
+                    Trading Dashboard
+                </h1>
+                <div className="flex items-center space-x-2 text-sm">
+                    <div className="flex items-center px-3 py-1 bg-green-500/10 text-green-500 rounded-full">
+                        <div className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
+                        Connected
+                    </div>
+                </div>
+            </div>
+
             {/* Stats Cards */}
-            <div className="grid grid-cols-4 gap-4">
-                {[
-                    { title: 'Balance', value: getStatValue(accountData?.balance), Icon: Wallet },
-                    { title: 'Equity', value: getStatValue(accountData?.equity), Icon: CreditCard },
-                    { title: 'Margin', value: getStatValue(accountData?.margin), Icon: Activity },
-                    { title: 'Free Margin', value: getStatValue(accountData?.freeMargin), Icon: LineChart }
-                ].map((stat) => (
-                    <div key={stat.title} className="bg-[#111827] rounded-lg p-4 border border-[#1f2937]">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {stats.map((stat) => (
+                    <div 
+                        key={stat.title}
+                        className={`bg-gradient-to-br ${stat.bgGradient} bg-[#111827] rounded-xl p-6 border border-[#1f2937] transition-transform duration-200 hover:scale-105 hover:shadow-lg`}
+                    >
                         <div className="flex justify-between items-start">
-                            <div className="text-gray-400 text-xs">{stat.title}</div>
-                            <stat.Icon className="w-4 h-4 text-gray-400" />
+                            <div>
+                                <div className="text-gray-400 text-sm font-medium mb-1">{stat.title}</div>
+                                <div className="text-2xl font-bold ${stat.color}">
+                                    ${formatCurrency(stat.value)}
+                                </div>
+                            </div>
+                            <div className={`p-2 rounded-lg ${stat.color} bg-opacity-10`}>
+                                <stat.Icon className={`w-5 h-5 ${stat.color}`} />
+                            </div>
                         </div>
-                        <div className="text-2xl font-bold mt-1">${stat.value.toFixed(2)}</div>
                     </div>
                 ))}
             </div>
 
-            <div className="grid grid-cols-12 gap-4">
+            <div className="grid grid-cols-12 gap-6">
                 {/* Balance & Equity Chart */}
-                <div className="col-span-8 bg-[#111827] rounded-lg p-4 border border-[#1f2937]">
-                    <h2 className="text-lg font-bold mb-4">Balance & Equity Overview</h2>
+                <div className="col-span-12 lg:col-span-8 bg-[#111827] rounded-xl p-6 border border-[#1f2937]">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-lg font-bold">Balance & Equity Overview</h2>
+                        <div className="flex space-x-4">
+                            <div className="flex items-center">
+                                <div className="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
+                                <span className="text-sm text-gray-400">Balance</span>
+                            </div>
+                            <div className="flex items-center">
+                                <div className="w-3 h-3 rounded-full bg-emerald-500 mr-2"></div>
+                                <span className="text-sm text-gray-400">Equity</span>
+                            </div>
+                        </div>
+                    </div>
                     <div className="h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={equityHistory}>
@@ -51,94 +139,66 @@ const Dashboard = ({ accountData, equityHistory }) => {
                                         <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
                                     </linearGradient>
                                     <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3}/>
-                                        <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
+                                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
+                                        <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
                                     </linearGradient>
                                 </defs>
-                                <XAxis dataKey="time" stroke="#4B5563" />
-                                <YAxis stroke="#4B5563" tickFormatter={(value) => `$${value}`} />
-                                <Tooltip 
-                                    contentStyle={{
-                                        backgroundColor: 'rgba(17, 24, 39, 0.8)',
-                                        border: '1px solid rgba(75, 85, 99, 0.2)',
-                                        borderRadius: '0.5rem'
-                                    }}
+                                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                                <XAxis 
+                                    dataKey="time" 
+                                    stroke="#6B7280"
+                                    tick={{ fill: '#6B7280' }}
                                 />
+                                <YAxis 
+                                    stroke="#6B7280"
+                                    tick={{ fill: '#6B7280' }}
+                                    tickFormatter={(value) => `$${formatCurrency(value)}`}
+                                />
+                                <Tooltip content={<CustomTooltip />} />
                                 <Area
                                     type="monotone"
                                     dataKey="balance"
                                     stroke="#3B82F6"
+                                    fillOpacity={1}
                                     fill="url(#balanceGradient)"
+                                    strokeWidth={2}
                                 />
                                 <Area
                                     type="monotone"
                                     dataKey="equity"
-                                    stroke="#8B5CF6"
+                                    stroke="#10B981"
+                                    fillOpacity={1}
                                     fill="url(#equityGradient)"
+                                    strokeWidth={2}
                                 />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                {/* Account Information */}
-                <div className="col-span-4 bg-[#111827] rounded-lg p-4 border border-[#1f2937]">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Server className="w-5 h-5 text-gray-400" />
-                        <h2 className="text-lg font-bold">Account Information</h2>
-                    </div>
-                    <div className="space-y-4">
-                        {[
-                            { label: 'Account Number', value: accountData?.number },
-                            { label: 'Leverage', value: accountData?.leverage },
-                            { label: 'Server', value: accountData?.server },
-                            { label: 'Currency', value: accountData?.currency }
-                        ].map((item) => (
-                            <div key={item.label}>
-                                <div className="text-gray-400 text-xs">{item.label}</div>
-                                <div className="text-lg">{item.value || 'N/A'}</div>
-                            </div>
-                        ))}
+                {/* Additional Stats */}
+                <div className="col-span-12 lg:col-span-4 space-y-6">
+                    <div className="bg-[#111827] rounded-xl p-6 border border-[#1f2937]">
+                        <h3 className="text-lg font-bold mb-4">Quick Stats</h3>
+                        <div className="space-y-4">
+                            {[
+                                { label: 'Profit/Loss', value: getStatValue(accountData?.profit), Icon: TrendingUp },
+                                { label: 'Open Positions', value: getStatValue(accountData?.openPositions), Icon: LineChart },
+                                { label: 'Used Margin %', value: (getStatValue(accountData?.margin) / getStatValue(accountData?.balance) * 100).toFixed(2) + '%', Icon: DollarSign }
+                            ].map((item, index) => (
+                                <div key={index} className="flex items-center justify-between p-3 bg-[#1a1f2e] rounded-lg">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="p-2 bg-blue-500/10 rounded-lg">
+                                            <item.Icon className="w-4 h-4 text-blue-500" />
+                                        </div>
+                                        <span className="text-gray-400">{item.label}</span>
+                                    </div>
+                                    <span className="font-semibold">{item.value}</span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
-            </div>
-
-            {/* Recent Trades */}
-            <div className="col-span-12 bg-[#111827] rounded-lg p-4 border border-[#1f2937]">
-                <div className="flex items-center gap-2 mb-4">
-                    <Users className="w-5 h-5 text-gray-400" />
-                    <h2 className="text-lg font-bold">Recent Trades</h2>
-                </div>
-                <table className="w-full">
-                    <thead>
-                        <tr className="text-gray-400 text-sm">
-                            <th className="text-left p-2">Ticket</th>
-                            <th className="text-left p-2">Symbol</th>
-                            <th className="text-left p-2">Type</th>
-                            <th className="text-left p-2">Lots</th>
-                            <th className="text-right p-2">Open Price</th>
-                            <th className="text-right p-2">SL/TP</th>
-                            <th className="text-right p-2">Profit</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {accountData?.positions?.map((trade) => (
-                            <tr key={trade.ticket} className="border-t border-[#1f2937]">
-                                <td className="p-2">{trade.ticket}</td>
-                                <td className="p-2">{trade.symbol}</td>
-                                <td className={`p-2 ${trade.type === 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                    {trade.type === 0 ? 'Buy' : 'Sell'}
-                                </td>
-                                <td className="p-2">{trade.lots}</td>
-                                <td className="p-2 text-right">{trade.openPrice}</td>
-                                <td className="p-2 text-right">{trade.stopLoss}/{trade.takeProfit}</td>
-                                <td className={`p-2 text-right ${trade.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                    ${(trade.profit || 0).toFixed(2)}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
             </div>
         </div>
     );
