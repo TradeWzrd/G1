@@ -414,6 +414,7 @@ const WebTerminal = () => {
         const [error, setError] = useState('');
         const [sortField, setSortField] = useState('closeTime');
         const [sortDirection, setSortDirection] = useState('desc');
+        const [connected, setConnected] = useState(false);
         const ws = useRef(null);
 
         useEffect(() => {
@@ -432,38 +433,62 @@ const WebTerminal = () => {
                 
                 ws.current.onopen = () => {
                     console.log('WebSocket connected successfully');
+                    setConnected(true);
+                    setError('');
                 };
                 
                 ws.current.onmessage = (event) => {
                     try {
-                        console.log('Received WebSocket message:', event.data);
+                        console.log('Raw WebSocket message received:', event.data);
                         const message = JSON.parse(event.data);
+                        console.log('Parsed WebSocket message:', message);
                         
                         if (message.type === 'tradeHistory') {
-                            console.log('Received trade history:', message.data);
-                            setHistory(message.data);
+                            console.log('Processing trade history:', message.data);
+                            const trades = message.data.split(';').map(trade => {
+                                const [
+                                    ticket, symbol, type, lots, openPrice, closePrice, 
+                                    openTime, closeTime, profit, commission, swap
+                                ] = trade.split(',');
+                                return {
+                                    ticket: parseInt(ticket),
+                                    symbol,
+                                    type: parseInt(type),
+                                    lots: parseFloat(lots),
+                                    openPrice: parseFloat(openPrice),
+                                    closePrice: parseFloat(closePrice),
+                                    openTime,
+                                    closeTime,
+                                    profit: parseFloat(profit),
+                                    commission: parseFloat(commission),
+                                    swap: parseFloat(swap)
+                                };
+                            });
+                            setHistory(trades);
                             setLoading(false);
                         } else if (message.type === 'error') {
-                            console.error('Received error:', message.error);
+                            console.error('Server error:', message.error);
                             setError(message.error);
                             setLoading(false);
                         }
                     } catch (error) {
-                        console.error('Error parsing WebSocket message:', error);
-                        setError('Failed to parse server response');
+                        console.error('Error processing WebSocket message:', error);
+                        setError('Failed to process server response');
                         setLoading(false);
                     }
                 };
 
                 ws.current.onerror = (error) => {
                     console.error('WebSocket error:', error);
-                    setError('WebSocket connection error');
-                    setLoading(false);
+                    setError('Connection error occurred');
+                    setConnected(false);
                 };
 
                 ws.current.onclose = () => {
                     console.log('WebSocket connection closed');
-                    setTimeout(connectWebSocket, 3000); // Reconnect after 3 seconds
+                    setConnected(false);
+                    // Attempt to reconnect after 3 seconds
+                    setTimeout(connectWebSocket, 3000);
                 };
             }
         };
@@ -471,7 +496,7 @@ const WebTerminal = () => {
         const syncHistory = () => {
             if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
                 console.error('WebSocket not connected');
-                setError('Not connected to server. Trying to reconnect...');
+                setError('Not connected to server. Attempting to reconnect...');
                 connectWebSocket();
                 return;
             }
@@ -489,9 +514,17 @@ const WebTerminal = () => {
                 
                 console.log('Sending history request:', command);
                 ws.current.send(JSON.stringify(command));
+                
+                // Set a timeout for the request
+                setTimeout(() => {
+                    if (loading) {
+                        setLoading(false);
+                        setError('Request timed out. Please try again.');
+                    }
+                }, 30000);
             } catch (error) {
                 console.error('Error sending history request:', error);
-                setError('Failed to request trade history');
+                setError('Failed to send request: ' + error.message);
                 setLoading(false);
             }
         };

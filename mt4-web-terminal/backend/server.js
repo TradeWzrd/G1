@@ -410,8 +410,10 @@ wss.on('connection', (ws) => {
     // Handle incoming messages
     ws.on('message', (message) => {
         try {
-            console.log('Raw message received:', message.toString());
-            const data = JSON.parse(message.toString());
+            const rawMessage = message.toString();
+            console.log('Raw WebSocket message received:', rawMessage);
+            
+            const data = JSON.parse(rawMessage);
             console.log('Parsed WebSocket message:', data);
 
             if (data.type === 'command' && data.command) {
@@ -419,9 +421,11 @@ wss.on('connection', (ws) => {
                 console.log('Processing command:', cmd, 'with params:', params);
                 
                 if (cmd === 'GET_HISTORY') {
+                    console.log('Processing history request with params:', params);
+                    
                     // Add command to pending queue for EA to process
                     pendingCommands.push(data.command);
-                    console.log('Added history request to pending commands. Current queue:', pendingCommands);
+                    console.log('Current pending commands:', pendingCommands);
                     
                     // Create a request tracker
                     const requestId = Date.now().toString();
@@ -433,20 +437,28 @@ wss.on('connection', (ws) => {
                         if (historyRequests.has(requestId)) {
                             console.log('History request timed out:', requestId);
                             historyRequests.delete(requestId);
-                            ws.send(JSON.stringify({
-                                type: 'error',
-                                error: 'History request timed out'
-                            }));
+                            try {
+                                ws.send(JSON.stringify({
+                                    type: 'error',
+                                    error: 'History request timed out'
+                                }));
+                            } catch (error) {
+                                console.error('Error sending timeout message:', error);
+                            }
                         }
                     }, 30000);
                 }
             }
         } catch (error) {
             console.error('Error processing WebSocket message:', error);
-            ws.send(JSON.stringify({
-                type: 'error',
-                error: 'Failed to process command: ' + error.message
-            }));
+            try {
+                ws.send(JSON.stringify({
+                    type: 'error',
+                    error: 'Failed to process command: ' + error.message
+                }));
+            } catch (sendError) {
+                console.error('Error sending error message:', sendError);
+            }
         }
     });
 
@@ -457,20 +469,32 @@ wss.on('connection', (ws) => {
 });
 
 // Handle trade history from EA
-app.post('/api/trade-history/ea', (req, res) => {
+app.post('/api/trade-history/ea', express.text(), (req, res) => {
     try {
-        console.log('Received trade history from EA. Body:', req.body);
+        console.log('Received trade history from EA');
         const historyData = req.body;
+
+        if (!historyData) {
+            console.error('No history data received');
+            return res.status(400).json({
+                success: false,
+                error: 'No history data received'
+            });
+        }
 
         // Broadcast to all connected WebSocket clients
         wss.clients.forEach(client => {
             if (client.readyState === WebSocket.OPEN) {
-                const message = JSON.stringify({
-                    type: 'tradeHistory',
-                    data: historyData.data
-                });
-                console.log('Broadcasting history to client:', message);
-                client.send(message);
+                try {
+                    const message = JSON.stringify({
+                        type: 'tradeHistory',
+                        data: historyData
+                    });
+                    console.log('Broadcasting history to client');
+                    client.send(message);
+                } catch (error) {
+                    console.error('Error sending history to client:', error);
+                }
             }
         });
 

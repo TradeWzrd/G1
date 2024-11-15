@@ -272,46 +272,8 @@ void ProcessCommand(string cmd)
             }
         }
     }
-    else if(action == "CLOSE") {
-        if(ArraySize(parts) < 2) return;
-        
-        int ticket = StringToInteger(parts[1]);
-        Print("Closing position: ", ticket);
-        
-        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
-            RefreshRates();
-            double closePrice = OrderType() == OP_BUY ? MarketInfo(OrderSymbol(), MODE_BID) : MarketInfo(OrderSymbol(), MODE_ASK);
-            bool result = OrderClose(ticket, OrderLots(), closePrice, 3);
-            if(!result) {
-                Print("Close failed - Error: ", GetLastError());
-            } else {
-                Print("Position closed successfully");
-            }
-        } else {
-            Print("Could not select order - Error: ", GetLastError());
-        }
-    }
-    else if(action == "MODIFY") {
-        if(ArraySize(parts) < 4) return;
-        
-        int ticket = StringToInteger(parts[1]);
-        double sl = StringToDouble(parts[2]);
-        double tp = StringToDouble(parts[3]);
-        
-        Print("Modifying position: ", ticket, " SL:", sl, " TP:", tp);
-        
-        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
-            bool result = OrderModify(ticket, OrderOpenPrice(), sl, tp, 0);
-            if(!result) {
-                Print("Modify failed - Error: ", GetLastError());
-            } else {
-                Print("Position modified successfully");
-            }
-        } else {
-            Print("Could not select order - Error: ", GetLastError());
-        }
-    }
     else if(action == "GET_HISTORY") {
+        Print("Processing GET_HISTORY command");
         if(ArraySize(parts) < 2) {
             Print("Invalid history command format");
             return;
@@ -326,18 +288,26 @@ void ProcessCommand(string cmd)
             endDate = parts[3];
         }
         
-        string history = GetTradeHistory(period, startDate, endDate);
+        Print("Getting trade history for period: ", period);
+        if(period == "custom") {
+            Print("Custom period - Start: ", startDate, " End: ", endDate);
+        }
         
-        // Send history to server
-        string jsonHistory = "{\"type\":\"tradeHistory\",\"data\":\"" + history + "\"}";
-        string headers = "Content-Type: application/json\r\nX-API-Key: " + ApiKey;
+        string history = GetTradeHistory(period, startDate, endDate);
+        Print("Retrieved history: ", history);
+        
+        // Send history to server using simple format
         char post[];
         char result[];
         string result_headers;
+        string headers = "Content-Type: text/plain\r\nX-API-Key: " + ApiKey;
         
-        StringToCharArray(jsonHistory, post);
+        Print("Sending history to server");
+        StringToCharArray(history, post);
         
         string url = ServerURL + "/api/trade-history/ea";
+        Print("Sending request to: ", url);
+        
         int res = WebRequest(
             "POST",           // Method
             url,             // URL
@@ -349,7 +319,33 @@ void ProcessCommand(string cmd)
         );
         
         if(res == -1) {
-            Print("Error sending history - Error:", GetLastError());
+            int error = GetLastError();
+            Print("Error sending history - Error code:", error);
+            
+            // Handle common WebRequest errors
+            switch(error) {
+                case 4051: // ERR_FUNCTION_NOT_ALLOWED
+                    Print("WebRequest function not allowed. Please enable in Tools -> Options -> Expert Advisors");
+                    break;
+                case 4075: // ERR_TRADE_SEND_FAILED
+                    Print("Request send failed");
+                    break;
+                case 4019: // ERR_INVALID_POINTER
+                    Print("Invalid data pointer");
+                    break;
+                case 4014: // ERR_TOO_MANY_REQUESTS
+                    Print("Too many requests");
+                    break;
+                case 4015: // ERR_NOT_ENOUGH_RIGHTS
+                    Print("Not enough rights");
+                    break;
+                case 4018: // ERR_NOT_ENOUGH_MEMORY
+                    Print("Not enough memory to complete operation");
+                    break;
+                default:
+                    Print("WebRequest error occurred");
+                    break;
+            }
             return;
         }
         
@@ -365,31 +361,43 @@ string GetTradeHistory(string period, string startDate="", string endDate="")
     datetime startTime = 0;
     datetime endTime = TimeCurrent();
     
+    Print("Getting trade history - Period:", period);
+    
     if(period == "today") {
         startTime = StrToTime(TimeToStr(TimeCurrent(), TIME_DATE));
+        Print("Today's history - Start time:", TimeToStr(startTime));
     }
     else if(period == "last3days") {
         startTime = TimeCurrent() - 3 * 24 * 60 * 60;
+        Print("Last 3 days history - Start time:", TimeToStr(startTime));
     }
     else if(period == "lastweek") {
         startTime = TimeCurrent() - 7 * 24 * 60 * 60;
+        Print("Last week history - Start time:", TimeToStr(startTime));
     }
     else if(period == "lastmonth") {
         startTime = TimeCurrent() - 30 * 24 * 60 * 60;
+        Print("Last month history - Start time:", TimeToStr(startTime));
     }
     else if(period == "last3months") {
         startTime = TimeCurrent() - 90 * 24 * 60 * 60;
+        Print("Last 3 months history - Start time:", TimeToStr(startTime));
     }
     else if(period == "last6months") {
         startTime = TimeCurrent() - 180 * 24 * 60 * 60;
+        Print("Last 6 months history - Start time:", TimeToStr(startTime));
     }
     else if(period == "custom" && startDate != "" && endDate != "") {
         startTime = StrToTime(startDate);
         endTime = StrToTime(endDate) + 24 * 60 * 60 - 1; // End of the day
+        Print("Custom period history - Start:", TimeToStr(startTime), " End:", TimeToStr(endTime));
     }
     
     string history = "";
     bool firstTrade = true;
+    int tradesFound = 0;
+    
+    Print("Searching for trades between ", TimeToStr(startTime), " and ", TimeToStr(endTime));
     
     for(int i = OrdersHistoryTotal() - 1; i >= 0; i--) {
         if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) {
@@ -404,15 +412,21 @@ string GetTradeHistory(string period, string startDate="", string endDate="")
                 history += DoubleToStr(OrderLots(), 2) + ",";
                 history += DoubleToStr(OrderOpenPrice(), 5) + ",";
                 history += DoubleToStr(OrderClosePrice(), 5) + ",";
-                history += TimeToStr(OrderOpenTime()) + ",";
-                history += TimeToStr(OrderCloseTime()) + ",";
+                history += TimeToStr(OrderOpenTime(), TIME_DATE|TIME_SECONDS) + ",";
+                history += TimeToStr(OrderCloseTime(), TIME_DATE|TIME_SECONDS) + ",";
                 history += DoubleToStr(OrderProfit(), 2) + ",";
                 history += DoubleToStr(OrderCommission(), 2) + ",";
                 history += DoubleToStr(OrderSwap(), 2);
                 
                 firstTrade = false;
+                tradesFound++;
             }
         }
+    }
+    
+    Print("Found ", tradesFound, " trades in the specified period");
+    if(tradesFound == 0) {
+        Print("No trades found in the period");
     }
     
     return history;
