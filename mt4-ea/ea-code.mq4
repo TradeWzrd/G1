@@ -7,6 +7,7 @@
 extern string   ServerURL = "https://g1-back.onrender.com";  // Server URL
 extern string   ApiKey = "";                                 // API Key
 extern int      UpdateInterval = 3;                         // Update interval in seconds
+extern string   LicenseID = "60123456789";                 // License ID for command validation
 
 // Magic number for identifying our trades
 #define MAGICMA 20240101
@@ -253,67 +254,67 @@ void ProcessCommand(string command) {
     string parts[];
     StringSplit(command, ',', parts);
     
+    // Validate command format
     if(ArraySize(parts) < 3) {
         Print("Invalid command format");
         return;
     }
     
-    string action = StringLower(parts[0]);  // Convert to lowercase
-    string symbol = parts[1];
-    double risk = 0.01;  // Default risk
-    double sl = 0;       // Default stop loss
-    double tp = 0;       // Default take profit
-    string comment = "Web Terminal";
+    // Validate license ID
+    if(parts[0] != LicenseID) {
+        Print("Invalid license ID");
+        return;
+    }
+    
+    string action = parts[1];
+    StringToLower(action);  // Convert to lowercase using built-in function
+    string symbol = parts[2];
+    double lots = 0.01;   // Default lots
+    double sl = 0;        // Default stop loss
+    double tp = 0;        // Default take profit
     
     // Parse parameters
-    for(int i = 2; i < ArraySize(parts); i++) {
+    for(int i = 3; i < ArraySize(parts); i++) {
         string paramParts[];
         StringSplit(parts[i], '=', paramParts);
         if(ArraySize(paramParts) != 2) continue;
         
-        string paramName = StringLower(StringTrimRight(StringTrimLeft(paramParts[0])));
+        string paramName = paramParts[0];
+        StringToLower(paramName);  // Convert to lowercase using built-in function
         string paramValue = StringTrimRight(StringTrimLeft(paramParts[1]));
         
         Print("Param: ", paramName, "=", paramValue);  // Debug print
         
-        if(paramName == "risk") risk = StringToDouble(paramValue);
+        if(paramName == "lots") lots = StringToDouble(paramValue);
         else if(paramName == "sl") sl = StringToDouble(paramValue);
         else if(paramName == "tp") tp = StringToDouble(paramValue);
-        else if(paramName == "comment") comment = paramValue;
     }
     
-    Print("Executing command - Action: ", action, ", Symbol: ", symbol, ", Risk: ", risk, ", SL: ", sl, ", TP: ", tp);
+    Print("Executing command - Action: ", action, ", Symbol: ", symbol, ", Lots: ", lots, ", SL: ", sl, ", TP: ", tp);
     
-    // Calculate lots based on risk
-    double accountBalance = AccountBalance();
+    // Validate and normalize lots
     double lotStep = MarketInfo(symbol, MODE_LOTSTEP);
     double minLot = MarketInfo(symbol, MODE_MINLOT);
     double maxLot = MarketInfo(symbol, MODE_MAXLOT);
-    double tickValue = MarketInfo(symbol, MODE_TICKVALUE);
-    double tickSize = MarketInfo(symbol, MODE_TICKSIZE);
     
-    // Calculate lot size based on risk percentage
-    double riskAmount = accountBalance * risk / 100;
-    double lots = NormalizeDouble(riskAmount / (tickValue / tickSize), 2);
     lots = MathMax(minLot, MathMin(maxLot, NormalizeDouble(lots / lotStep, 0) * lotStep));
-    
-    Print("Calculated lots: ", lots);
+    Print("Normalized lots: ", lots);
     
     // Execute command
-    if(action == "buy" || action == "long" || action == "bull" || action == "bullish") {
+    if(action == "buy") {
         double ask = MarketInfo(symbol, MODE_ASK);
         Print("Opening BUY order at ", ask);
-        int ticket = OrderSend(symbol, OP_BUY, lots, ask, 3, sl, tp, comment, MAGICMA);
+        int ticket = OrderSend(symbol, OP_BUY, lots, ask, 3, sl, tp, "Web Terminal", MAGICMA);
         if(ticket < 0) {
             int error = GetLastError();
             Print("Error opening BUY order: ", error, " - ", GetErrorText(error));
         }
         else Print("BUY order opened: Ticket=", ticket);
     }
-    else if(action == "sell" || action == "short" || action == "bear" || action == "bearish") {
+    else if(action == "sell") {
         double bid = MarketInfo(symbol, MODE_BID);
         Print("Opening SELL order at ", bid);
-        int ticket = OrderSend(symbol, OP_SELL, lots, bid, 3, sl, tp, comment, MAGICMA);
+        int ticket = OrderSend(symbol, OP_SELL, lots, bid, 3, sl, tp, "Web Terminal", MAGICMA);
         if(ticket < 0) {
             int error = GetLastError();
             Print("Error opening SELL order: ", error, " - ", GetErrorText(error));

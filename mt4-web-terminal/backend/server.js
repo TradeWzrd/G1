@@ -16,6 +16,9 @@ let eaConnected = false;
 let lastEAUpdate = Date.now();
 let pendingCommands = [];
 
+// License ID for PineConnector format
+const LICENSE_ID = "60123456789";  // Replace with actual license
+
 // Middleware
 app.use(express.text({ type: '*/*' }));  // Handle all content types as text
 app.use(express.json());
@@ -153,40 +156,32 @@ app.post('/api/trade', (req, res) => {
         return res.status(400).json({ error: 'Missing required parameters' });
     }
 
-    // Format command string
-    let command = '';
+    // Format command string in PineConnector format
+    let command = LICENSE_ID + ',';
     
     if (action === 'buy') {
-        command = 'buy,' + symbol;
+        command += 'buy,' + symbol;
         if (params) {
-            // Add risk (required)
-            command += ',risk=' + (params.lots || 0.01);
-            // Add stop loss if provided and not zero
+            if (params.lots) command += ',lots=' + params.lots;
             if (params.sl && params.sl !== 0) command += ',sl=' + params.sl;
-            // Add take profit if provided and not zero
             if (params.tp && params.tp !== 0) command += ',tp=' + params.tp;
-            // Add comment if provided
-            if (params.comment) command += ',comment=' + params.comment;
         }
     }
     else if (action === 'sell') {
-        command = 'sell,' + symbol;
+        command += 'sell,' + symbol;
         if (params) {
-            // Add risk (required)
-            command += ',risk=' + (params.lots || 0.01);
-            // Add stop loss if provided and not zero
+            if (params.lots) command += ',lots=' + params.lots;
             if (params.sl && params.sl !== 0) command += ',sl=' + params.sl;
-            // Add take profit if provided and not zero
             if (params.tp && params.tp !== 0) command += ',tp=' + params.tp;
-            // Add comment if provided
-            if (params.comment) command += ',comment=' + params.comment;
         }
     }
     else if (action === 'close') {
-        if (symbol.includes('buy') || symbol.includes('sell')) {
-            command = 'close' + symbol + ',' + symbol.split('-')[1];
+        if (symbol.toLowerCase().includes('buy')) {
+            command += 'closelong,' + symbol.split('-')[1];
+        } else if (symbol.toLowerCase().includes('sell')) {
+            command += 'closeshort,' + symbol.split('-')[1];
         } else {
-            command = 'closeall,' + symbol;
+            command += 'closeall,' + symbol;
         }
     }
 

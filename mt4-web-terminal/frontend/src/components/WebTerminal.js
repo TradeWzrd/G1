@@ -8,7 +8,7 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
     const [loading, setLoading] = useState(false);
     const [newOrder, setNewOrder] = useState({
         symbol: '',
-        risk: '0.01',  
+        lots: '0.01',
         stopLoss: '',
         takeProfit: '',
         comment: ''
@@ -46,7 +46,7 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
                 symbol: position ? (action + '-' + position.symbol) : newOrder.symbol,
                 // Only include params for buy/sell actions
                 params: position ? undefined : {
-                    risk: parseFloat(newOrder.risk) || 0.01,
+                    lots: parseFloat(newOrder.lots) || 0.01,
                     sl: parseFloat(newOrder.stopLoss) || 0,
                     tp: parseFloat(newOrder.takeProfit) || 0,
                     comment: newOrder.comment || 'Web Terminal'
@@ -77,7 +77,7 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
             if (!position) {
                 setNewOrder({
                     symbol: '',
-                    risk: '0.01',
+                    lots: '0.01',
                     stopLoss: '',
                     takeProfit: '',
                     comment: ''
@@ -157,13 +157,13 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-300">Risk</label>
+                            <label className="block text-sm font-medium text-gray-300">Lots</label>
                             <input
                                 type="number"
-                                name="risk"
+                                name="lots"
                                 step="0.01"
                                 min="0.01"
-                                value={newOrder.risk}
+                                value={newOrder.lots}
                                 onChange={handleInputChange}
                                 className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
                             />
