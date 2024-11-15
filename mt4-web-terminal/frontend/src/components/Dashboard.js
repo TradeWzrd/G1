@@ -13,7 +13,7 @@ import {
     DollarSign 
 } from 'lucide-react';
 
-const Dashboard = ({ accountData, equityHistory }) => {
+const Dashboard = ({ accountData, equityHistory, connected, eaConnected }) => {
     // Helper function to safely get numeric values
     const getStatValue = (value) => {
         const numValue = parseFloat(value);
@@ -46,158 +46,139 @@ const Dashboard = ({ accountData, equityHistory }) => {
         return null;
     };
 
+    // Calculate profit/loss
+    const balance = getStatValue(accountData?.balance);
+    const equity = getStatValue(accountData?.equity);
+    const pnl = equity - balance;
+    const pnlPercentage = balance !== 0 ? (pnl / balance) * 100 : 0;
+
     const stats = [
         { 
             title: 'Balance', 
-            value: getStatValue(accountData?.balance), 
-            Icon: Wallet,
+            value: accountData?.balance || 0,
+            icon: Wallet,
             color: 'text-blue-500',
-            bgGradient: 'from-blue-500/10 to-transparent'
+            bgColor: 'bg-blue-500/10',
+            borderColor: 'border-blue-500/20'
         },
         { 
             title: 'Equity', 
-            value: getStatValue(accountData?.equity), 
-            Icon: CreditCard,
+            value: accountData?.equity || 0,
+            icon: DollarSign,
             color: 'text-emerald-500',
-            bgGradient: 'from-emerald-500/10 to-transparent'
+            bgColor: 'bg-emerald-500/10',
+            borderColor: 'border-emerald-500/20'
         },
         { 
             title: 'Margin', 
-            value: getStatValue(accountData?.margin), 
-            Icon: Activity,
+            value: accountData?.margin || 0,
+            icon: Activity,
             color: 'text-purple-500',
-            bgGradient: 'from-purple-500/10 to-transparent'
+            bgColor: 'bg-purple-500/10',
+            borderColor: 'border-purple-500/20'
         },
         { 
             title: 'Free Margin', 
-            value: getStatValue(accountData?.freeMargin), 
-            Icon: LineChart,
+            value: accountData?.freeMargin || 0,
+            icon: TrendingUp,
             color: 'text-amber-500',
-            bgGradient: 'from-amber-500/10 to-transparent'
+            bgColor: 'bg-amber-500/10',
+            borderColor: 'border-amber-500/20'
         }
     ];
 
     return (
         <div className="p-6 space-y-6 bg-[#0a0f1a] text-white min-h-screen">
             {/* Header */}
-            <div className="flex justify-between items-center mb-8">
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
-                    Trading Dashboard
-                </h1>
-                <div className="flex items-center space-x-2 text-sm">
-                    <div className="flex items-center px-3 py-1 bg-green-500/10 text-green-500 rounded-full">
-                        <div className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
-                        Connected
+            <div className="flex justify-between items-center">
+                <div>
+                    <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
+                        Trading Dashboard
+                    </h1>
+                    <p className="text-sm text-gray-400">Real-time account overview and analytics</p>
+                </div>
+                <div className="flex items-center space-x-4">
+                    <div className={`flex items-center px-3 py-1 rounded-full text-sm
+                        ${connected ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
+                        <div className={`w-2 h-2 rounded-full mr-2 ${connected ? 'bg-green-500' : 'bg-red-500'} animate-pulse`}></div>
+                        {connected ? 'Connected' : 'Disconnected'}
+                    </div>
+                    <div className={`flex items-center px-3 py-1 rounded-full text-sm
+                        ${eaConnected ? 'bg-blue-500/10 text-blue-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                        <div className={`w-2 h-2 rounded-full mr-2 ${eaConnected ? 'bg-blue-500' : 'bg-yellow-500'} animate-pulse`}></div>
+                        {eaConnected ? 'EA Connected' : 'EA Disconnected'}
                     </div>
                 </div>
             </div>
 
-            {/* Stats Cards */}
+            {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {stats.map((stat) => (
-                    <div 
+                {stats.map((stat, index) => (
+                    <div
                         key={stat.title}
-                        className={`bg-gradient-to-br ${stat.bgGradient} bg-[#111827] rounded-xl p-6 border border-[#1f2937] transition-transform duration-200 hover:scale-105 hover:shadow-lg`}
+                        className={`p-6 rounded-xl border ${stat.borderColor} ${stat.bgColor} backdrop-blur-xl`}
                     >
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <div className="text-gray-400 text-sm font-medium mb-1">{stat.title}</div>
-                                <div className="text-2xl font-bold ${stat.color}">
-                                    ${formatCurrency(stat.value)}
+                        <div className="flex flex-col space-y-4">
+                            <div className="flex items-center space-x-3">
+                                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
+                                    <stat.icon className={`w-5 h-5 ${stat.color}`} />
                                 </div>
+                                <h3 className="text-sm font-medium text-gray-400">{stat.title}</h3>
                             </div>
-                            <div className={`p-2 rounded-lg ${stat.color} bg-opacity-10`}>
-                                <stat.Icon className={`w-5 h-5 ${stat.color}`} />
+                            <div className="flex items-baseline">
+                                <span className="text-2xl font-bold text-white">
+                                    ${formatCurrency(stat.value)}
+                                </span>
                             </div>
                         </div>
                     </div>
                 ))}
             </div>
 
-            <div className="grid grid-cols-12 gap-6">
-                {/* Balance & Equity Chart */}
-                <div className="col-span-12 lg:col-span-8 bg-[#111827] rounded-xl p-6 border border-[#1f2937]">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-lg font-bold">Balance & Equity Overview</h2>
-                        <div className="flex space-x-4">
-                            <div className="flex items-center">
-                                <div className="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
-                                <span className="text-sm text-gray-400">Balance</span>
-                            </div>
-                            <div className="flex items-center">
-                                <div className="w-3 h-3 rounded-full bg-emerald-500 mr-2"></div>
-                                <span className="text-sm text-gray-400">Equity</span>
-                            </div>
-                        </div>
+            {/* Chart */}
+            <div className="rounded-xl border border-[#2a3441] bg-[#1a1f2e] p-6">
+                <div className="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 className="text-lg font-bold text-white">Equity Chart</h2>
+                        <p className="text-sm text-gray-400">Real-time equity performance</p>
                     </div>
-                    <div className="h-[400px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={equityHistory}>
-                                <defs>
-                                    <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
-                                        <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
-                                    </linearGradient>
-                                    <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
-                                        <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                                <XAxis 
-                                    dataKey="time" 
-                                    stroke="#6B7280"
-                                    tick={{ fill: '#6B7280' }}
-                                />
-                                <YAxis 
-                                    stroke="#6B7280"
-                                    tick={{ fill: '#6B7280' }}
-                                    tickFormatter={(value) => `$${formatCurrency(value)}`}
-                                />
-                                <Tooltip content={<CustomTooltip />} />
-                                <Area
-                                    type="monotone"
-                                    dataKey="balance"
-                                    stroke="#3B82F6"
-                                    fillOpacity={1}
-                                    fill="url(#balanceGradient)"
-                                    strokeWidth={2}
-                                />
-                                <Area
-                                    type="monotone"
-                                    dataKey="equity"
-                                    stroke="#10B981"
-                                    fillOpacity={1}
-                                    fill="url(#equityGradient)"
-                                    strokeWidth={2}
-                                />
-                            </AreaChart>
-                        </ResponsiveContainer>
+                    <div className={`flex items-center px-3 py-1 rounded-lg text-sm
+                        ${pnl >= 0 ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
+                        <span className="font-medium">
+                            {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)} ({pnlPercentage.toFixed(2)}%)
+                        </span>
                     </div>
                 </div>
-
-                {/* Additional Stats */}
-                <div className="col-span-12 lg:col-span-4 space-y-6">
-                    <div className="bg-[#111827] rounded-xl p-6 border border-[#1f2937]">
-                        <h3 className="text-lg font-bold mb-4">Quick Stats</h3>
-                        <div className="space-y-4">
-                            {[
-                                { label: 'Profit/Loss', value: getStatValue(accountData?.profit), Icon: TrendingUp },
-                                { label: 'Open Positions', value: getStatValue(accountData?.openPositions), Icon: LineChart },
-                                { label: 'Used Margin %', value: (getStatValue(accountData?.margin) / getStatValue(accountData?.balance) * 100).toFixed(2) + '%', Icon: DollarSign }
-                            ].map((item, index) => (
-                                <div key={index} className="flex items-center justify-between p-3 bg-[#1a1f2e] rounded-lg">
-                                    <div className="flex items-center space-x-3">
-                                        <div className="p-2 bg-blue-500/10 rounded-lg">
-                                            <item.Icon className="w-4 h-4 text-blue-500" />
-                                        </div>
-                                        <span className="text-gray-400">{item.label}</span>
-                                    </div>
-                                    <span className="font-semibold">{item.value}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                <div className="h-[400px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={equityHistory}>
+                            <defs>
+                                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.1}/>
+                                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#2a3441" />
+                            <XAxis 
+                                dataKey="time" 
+                                stroke="#6B7280"
+                                tick={{ fill: '#6B7280' }}
+                            />
+                            <YAxis
+                                stroke="#6B7280"
+                                tick={{ fill: '#6B7280' }}
+                                tickFormatter={(value) => `$${formatCurrency(value)}`}
+                            />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Area
+                                type="monotone"
+                                dataKey="value"
+                                stroke="#3B82F6"
+                                fillOpacity={1}
+                                fill="url(#colorValue)"
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
                 </div>
             </div>
         </div>

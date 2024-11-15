@@ -185,31 +185,36 @@ const WebTerminal = () => {
         }
     };
 
-    const handleClosePosition = async (ticket) => {
-        try {
-            const response = await fetch('https://g1-back.onrender.com/api/trade', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    action: 'close',
-                    ticket
-                })
-            });
+    const handleClosePosition = useCallback((ticket, percentage = 100) => {
+        if (!ws.current) return;
+        
+        const command = percentage === 100 
+            ? `CLOSE,${ticket}`
+            : `CLOSE,${ticket},${percentage}`;
+            
+        ws.current.send(JSON.stringify({
+            type: 'command',
+            data: command
+        }));
+    }, []);
 
-            const data = await response.json();
-            if (data.success) {
-                setSuccess('Position closed successfully!');
-                setError(null);
-                setTimeout(() => setSuccess(null), 3000);
-            } else {
-                setError(data.error || 'Failed to close position');
-            }
-        } catch (error) {
-            setError('Network error: ' + error.message);
-        }
-    };
+    const handleModifyPosition = useCallback((ticket, sl, tp) => {
+        if (!ws.current) return;
+        
+        ws.current.send(JSON.stringify({
+            type: 'command',
+            data: `MODIFY,${ticket},${sl},${tp}`
+        }));
+    }, []);
+
+    const handleBreakeven = useCallback((ticket, pips = 0) => {
+        if (!ws.current) return;
+        
+        ws.current.send(JSON.stringify({
+            type: 'command',
+            data: `BREAKEVEN,${ticket},${pips}`
+        }));
+    }, []);
 
     const handleCloseAll = async () => {
         try {
@@ -234,6 +239,158 @@ const WebTerminal = () => {
             console.error('Close all error:', error);
             setError('Network error: ' + error.message);
         }
+    };
+
+    const PositionActions = ({ position, onClose, onModify, onBreakeven }) => {
+        const [isModalOpen, setIsModalOpen] = useState(false);
+        const [modalType, setModalType] = useState(null);
+        const [percentage, setPercentage] = useState(50);
+        const [stopLoss, setStopLoss] = useState(position.sl);
+        const [takeProfit, setTakeProfit] = useState(position.tp);
+        const [breakEvenPips, setBreakEvenPips] = useState(2);
+
+        const handleAction = (action) => {
+            setModalType(action);
+            setIsModalOpen(true);
+        };
+
+        const handleSubmit = () => {
+            switch(modalType) {
+                case 'partial':
+                    onClose(position.ticket, percentage);
+                    break;
+                case 'modify':
+                    onModify(position.ticket, stopLoss, takeProfit);
+                    break;
+                case 'breakeven':
+                    onBreakeven(position.ticket, breakEvenPips);
+                    break;
+            }
+            setIsModalOpen(false);
+        };
+
+        return (
+            <>
+                <div className="flex space-x-2">
+                    <button
+                        onClick={() => onClose(position.ticket)}
+                        className="px-2 py-1 bg-red-500/10 text-red-500 rounded hover:bg-red-500/20"
+                    >
+                        Close
+                    </button>
+                    <button
+                        onClick={() => handleAction('partial')}
+                        className="px-2 py-1 bg-orange-500/10 text-orange-500 rounded hover:bg-orange-500/20"
+                    >
+                        Partial
+                    </button>
+                    <button
+                        onClick={() => handleAction('modify')}
+                        className="px-2 py-1 bg-blue-500/10 text-blue-500 rounded hover:bg-blue-500/20"
+                    >
+                        Modify
+                    </button>
+                    <button
+                        onClick={() => handleAction('breakeven')}
+                        className="px-2 py-1 bg-green-500/10 text-green-500 rounded hover:bg-green-500/20"
+                    >
+                        BE
+                    </button>
+                </div>
+
+                {/* Modal */}
+                {isModalOpen && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
+                        <div className="bg-[#1a1f2e] p-6 rounded-xl border border-[#2a3441] w-96">
+                            <h3 className="text-lg font-bold mb-4">
+                                {modalType === 'partial' && 'Close Partial Position'}
+                                {modalType === 'modify' && 'Modify Position'}
+                                {modalType === 'breakeven' && 'Set Breakeven'}
+                            </h3>
+
+                            <div className="space-y-4">
+                                {modalType === 'partial' && (
+                                    <div>
+                                        <label className="block text-sm text-gray-400 mb-1">
+                                            Close Percentage
+                                        </label>
+                                        <input
+                                            type="range"
+                                            min="1"
+                                            max="99"
+                                            value={percentage}
+                                            onChange={(e) => setPercentage(Number(e.target.value))}
+                                            className="w-full"
+                                        />
+                                        <div className="text-center mt-2">{percentage}%</div>
+                                    </div>
+                                )}
+
+                                {modalType === 'modify' && (
+                                    <>
+                                        <div>
+                                            <label className="block text-sm text-gray-400 mb-1">
+                                                Stop Loss
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={stopLoss}
+                                                onChange={(e) => setStopLoss(Number(e.target.value))}
+                                                className="w-full bg-[#2a3441] p-2 rounded"
+                                                step="0.00001"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-gray-400 mb-1">
+                                                Take Profit
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={takeProfit}
+                                                onChange={(e) => setTakeProfit(Number(e.target.value))}
+                                                className="w-full bg-[#2a3441] p-2 rounded"
+                                                step="0.00001"
+                                            />
+                                        </div>
+                                    </>
+                                )}
+
+                                {modalType === 'breakeven' && (
+                                    <div>
+                                        <label className="block text-sm text-gray-400 mb-1">
+                                            Pips Buffer
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={breakEvenPips}
+                                            onChange={(e) => setBreakEvenPips(Number(e.target.value))}
+                                            className="w-full bg-[#2a3441] p-2 rounded"
+                                            min="0"
+                                            step="0.1"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex justify-end space-x-4 mt-6">
+                                <button
+                                    onClick={() => setIsModalOpen(false)}
+                                    className="px-4 py-2 bg-gray-500/10 text-gray-400 rounded hover:bg-gray-500/20"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSubmit}
+                                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                >
+                                    Confirm
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </>
+        );
     };
 
     return (
@@ -446,43 +603,42 @@ const WebTerminal = () => {
                         <div className="overflow-x-auto">
                             <table className="w-full">
                                 <thead>
-                                    <tr className="border-b border-[#2a3441]">
-                                        <th className="text-left py-3 px-4 text-sm font-medium text-gray-400">Symbol</th>
-                                        <th className="text-left py-3 px-4 text-sm font-medium text-gray-400">Type</th>
-                                        <th className="text-right py-3 px-4 text-sm font-medium text-gray-400">Lots</th>
-                                        <th className="text-right py-3 px-4 text-sm font-medium text-gray-400">Open Price</th>
-                                        <th className="text-right py-3 px-4 text-sm font-medium text-gray-400">Current Price</th>
-                                        <th className="text-right py-3 px-4 text-sm font-medium text-gray-400">Profit</th>
-                                        <th className="text-right py-3 px-4 text-sm font-medium text-gray-400">Actions</th>
+                                    <tr className="text-left text-sm text-gray-400">
+                                        <th className="p-4">Ticket</th>
+                                        <th className="p-4">Symbol</th>
+                                        <th className="p-4">Type</th>
+                                        <th className="p-4">Lots</th>
+                                        <th className="p-4">Open Price</th>
+                                        <th className="p-4">S/L</th>
+                                        <th className="p-4">T/P</th>
+                                        <th className="p-4">Profit</th>
+                                        <th className="p-4">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {positions.map((position) => (
-                                        <tr key={position.ticket} className="border-b border-[#2a3441] last:border-0">
-                                            <td className="py-3 px-4 text-sm">{position.symbol}</td>
-                                            <td className="py-3 px-4">
-                                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-sm
-                                                    ${position.type === 0 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-                                                    {position.type === 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                                                    {position.type === 0 ? 'Buy' : 'Sell'}
+                                        <tr key={position.ticket} className="border-t border-[#2a3441]">
+                                            <td className="p-4">{position.ticket}</td>
+                                            <td className="p-4">{position.symbol}</td>
+                                            <td className="p-4">
+                                                <span className={position.type === 0 ? 'text-green-500' : 'text-red-500'}>
+                                                    {position.type === 0 ? 'BUY' : 'SELL'}
                                                 </span>
                                             </td>
-                                            <td className="py-3 px-4 text-right text-sm">{position.lots?.toFixed(2)}</td>
-                                            <td className="py-3 px-4 text-right text-sm">{formatPrice(position.openPrice)}</td>
-                                            <td className="py-3 px-4 text-right text-sm">{formatPrice(position.currentPrice)}</td>
-                                            <td className={`py-3 px-4 text-right text-sm font-medium
-                                                ${position.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                ${formatCurrency(position.profit)}
+                                            <td className="p-4">{position.lots}</td>
+                                            <td className="p-4">{position.openPrice}</td>
+                                            <td className="p-4">{position.sl}</td>
+                                            <td className="p-4">{position.tp}</td>
+                                            <td className={`p-4 ${position.profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                                {formatCurrency(position.profit)}
                                             </td>
-                                            <td className="py-3 px-4 text-right">
-                                                <button
-                                                    onClick={() => handleClosePosition(position.ticket)}
-                                                    className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg
-                                                             transition-all inline-flex items-center gap-1"
-                                                >
-                                                    <X className="w-4 h-4" />
-                                                    Close
-                                                </button>
+                                            <td className="p-4">
+                                                <PositionActions
+                                                    position={position}
+                                                    onClose={handleClosePosition}
+                                                    onModify={handleModifyPosition}
+                                                    onBreakeven={handleBreakeven}
+                                                />
                                             </td>
                                         </tr>
                                     ))}

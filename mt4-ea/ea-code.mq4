@@ -201,6 +201,83 @@ void ProcessCommand(string cmd)
         if(ArraySize(parts) < 2) return;
         
         int ticket = StringToInteger(parts[1]);
+        double lots = OrderLots(); // Default to full position
+        
+        // If partial close is requested
+        if(ArraySize(parts) > 2) {
+            double percentage = StringToDouble(parts[2]);
+            if(percentage > 0 && percentage < 100) {
+                lots = NormalizeDouble(OrderLots() * percentage / 100, 2);
+            }
+        }
+        
+        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
+            RefreshRates();
+            double closePrice = OrderType() == OP_BUY ? 
+                MarketInfo(OrderSymbol(), MODE_BID) : 
+                MarketInfo(OrderSymbol(), MODE_ASK);
+                
+            bool result = OrderClose(ticket, lots, closePrice, 3);
+            if(!result) {
+                Print("Failed to close order #", ticket, " Error: ", GetLastError());
+            } else {
+                Print("Successfully closed order #", ticket, " Lots: ", lots);
+            }
+        }
+    }
+    else if(action == "MODIFY") {
+        if(ArraySize(parts) < 4) return;
+        
+        int ticket = StringToInteger(parts[1]);
+        double sl = StringToDouble(parts[2]);
+        double tp = StringToDouble(parts[3]);
+        
+        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
+            bool result = OrderModify(ticket, OrderOpenPrice(), sl, tp, 0);
+            if(!result) {
+                Print("Failed to modify order #", ticket, " Error: ", GetLastError());
+            } else {
+                Print("Successfully modified order #", ticket);
+            }
+        }
+    }
+    else if(action == "BREAKEVEN") {
+        if(ArraySize(parts) < 2) return;
+        
+        int ticket = StringToInteger(parts[1]);
+        double pips = 0;
+        
+        // Optional pips buffer
+        if(ArraySize(parts) > 2) {
+            pips = StringToDouble(parts[2]);
+        }
+        
+        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
+            double openPrice = OrderOpenPrice();
+            double newSL = openPrice;
+            
+            // Add pips buffer if specified
+            if(pips > 0) {
+                double pipValue = MarketInfo(OrderSymbol(), MODE_POINT) * 10;
+                if(OrderType() == OP_BUY) {
+                    newSL += pips * pipValue;
+                } else if(OrderType() == OP_SELL) {
+                    newSL -= pips * pipValue;
+                }
+            }
+            
+            bool result = OrderModify(ticket, openPrice, newSL, OrderTakeProfit(), 0);
+            if(!result) {
+                Print("Failed to set breakeven for order #", ticket, " Error: ", GetLastError());
+            } else {
+                Print("Successfully set breakeven for order #", ticket);
+            }
+        }
+    }
+    else if(action == "CLOSE") {
+        if(ArraySize(parts) < 2) return;
+        
+        int ticket = StringToInteger(parts[1]);
         Print("Closing position: ", ticket);
         
         if(OrderSelect(ticket, SELECT_BY_TICKET)) {
@@ -345,3 +422,4 @@ void OnTick()
     if(lastError != "") status += "Error: " + lastError + "\n";
     Comment(status);
 }
+```
