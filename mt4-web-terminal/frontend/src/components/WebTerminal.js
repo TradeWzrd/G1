@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { LineChart, XAxis, YAxis, Tooltip, Line, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { TrendingUp, TrendingDown, X, DollarSign, Wallet, Activity, RefreshCw, BarChart2, Clock } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 const API_URL = 'https://g1-back.onrender.com';
 
 const WebTerminal = () => {
+    const [connected, setConnected] = useState(false);
     const [accountData, setAccountData] = useState(null);
     const [positions, setPositions] = useState([]);
-    const [connected, setConnected] = useState(false);
-    const [eaConnected, setEAConnected] = useState(false);
-    const [error, setError] = useState(null);
-    const [equityHistory, setEquityHistory] = useState([]);
-    const [success, setSuccess] = useState(null);
+    const [symbol, setSymbol] = useState('XAUUSDm');
+    const [risk, setRisk] = useState(0.01);
+    const [sl, setSL] = useState('');
+    const [tp, setTP] = useState('');
+    const [comment, setComment] = useState('');
     const [newOrder, setNewOrder] = useState({
         symbol: 'XAUUSDm',
         lots: 0.01,
@@ -22,6 +24,9 @@ const WebTerminal = () => {
     const [tradeHistory, setTradeHistory] = useState([]);
     const [historyLoading, setHistoryLoading] = useState(false);
     const [historyError, setHistoryError] = useState('');
+    const [error, setError] = useState(null);
+    const [success, setSuccess] = useState(null);
+    const [eaConnected, setEAConnected] = useState(false);
 
     // WebSocket reference and reconnection settings
     const ws = useRef(null);
@@ -150,37 +155,40 @@ const WebTerminal = () => {
         };
     }, []);
 
-    const sendTradeCommand = async (action, symbol, params = {}) => {
+    // Send trade command
+    const sendTradeCommand = async (action) => {
+        if (!connected) {
+            toast.error('Not connected to server');
+            return;
+        }
+
         try {
-            console.log('Sending trade command:', { action, symbol, params });
-            const response = await fetch(`${API_URL}/api/trade`, {
+            const command = {
+                action,
+                symbol,
+                risk: parseFloat(risk),
+                sl: sl ? parseFloat(sl) : undefined,
+                tp: tp ? parseFloat(tp) : undefined,
+                comment: comment || undefined
+            };
+
+            const response = await fetch('https://g1-back.onrender.com/api/trade', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    action,
-                    symbol,
-                    params
-                }),
+                body: JSON.stringify(command)
             });
 
-            if (!response.ok) {
-                throw new Error('Failed to send trade command');
-            }
-
-            const result = await response.json();
-            console.log('Trade command sent:', result);
-            
-            if (result.success) {
-                setSuccess('Trade command sent successfully');
-                setTimeout(() => setSuccess(null), 3000);
+            const data = await response.json();
+            if (data.status === 'command_sent') {
+                toast.success(`${action.toUpperCase()} order sent`);
             } else {
-                setError(result.error || 'Failed to send trade command');
+                toast.error('Failed to send order');
             }
         } catch (error) {
             console.error('Error sending trade command:', error);
-            setError(error.message);
+            toast.error('Error sending trade command');
         }
     };
 

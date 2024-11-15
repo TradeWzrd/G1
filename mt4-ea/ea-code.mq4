@@ -14,372 +14,245 @@ extern int      UpdateInterval = 3;                         // Update interval i
 // Global variables
 bool isConnected = false;
 string lastError = "";
-string wsUrl;  // WebSocket URL
 
 //+------------------------------------------------------------------+
-//| Create simple data string                                         |
+//| Send data to server                                                |
 //+------------------------------------------------------------------+
-string CreateUpdateString()
-{
-    // Format: ACCOUNT|balance;equity;margin;freeMargin|POSITIONS|ticket,symbol,type,lots,openPrice,sl,tp,profit
-    string data = "ACCOUNT|";
+void SendToServer(string data) {
+    string url = ServerURL + "/api/mt4/update";
+    char post[];
+    char result[];
+    string headers = "Content-Type: text/plain\r\n";
     
-    // Account data
-    data += DoubleToStr(AccountBalance(), 2) + ";";
-    data += DoubleToStr(AccountEquity(), 2) + ";";
-    data += DoubleToStr(AccountMargin(), 2) + ";";
-    data += DoubleToStr(AccountFreeMargin(), 2);
+    StringToCharArray(data, post);
     
-    // Add positions
-    data += "|POSITIONS|";
-    bool firstPosition = true;
+    int res = WebRequest(
+        "POST",
+        url,
+        headers,
+        5000,
+        post,
+        result,
+        lastError
+    );
     
-    for(int i = 0; i < OrdersTotal(); i++) {
-        if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
-            if(!firstPosition) data += ";";
-            
-            data += OrderTicket() + ",";
-            data += OrderSymbol() + ",";
-            data += OrderType() + ",";
-            data += DoubleToStr(OrderLots(), 2) + ",";
-            data += DoubleToStr(OrderOpenPrice(), 5) + ",";
-            data += DoubleToStr(OrderStopLoss(), 5) + ",";
-            data += DoubleToStr(OrderTakeProfit(), 5) + ",";
-            data += DoubleToStr(OrderProfit(), 2);
-            
-            firstPosition = false;
-        }
-    }
-    
-    return data;
-}
-
-//+------------------------------------------------------------------+
-//| Process server response                                           |
-//+------------------------------------------------------------------+
-void ProcessServerResponse(string response)
-{
-    Print("Processing server response: ", response);
-    
-    // Check if response contains commands
-    if (StringFind(response, "commands") != -1) {
-        string commandsStr = ExtractValueFromJson(response, "commands");
-        if (StringLen(commandsStr) > 0) {
-            ProcessCommand(commandsStr);
-        }
+    if(res == -1) {
+        int error = GetLastError();
+        Print("Error in WebRequest: ", error);
+        isConnected = false;
+    } else {
+        isConnected = true;
+        string response = CharArrayToString(result);
+        ProcessServerResponse(response);
     }
 }
 
 //+------------------------------------------------------------------+
-//| Process JSON command                                               |
+//| Create account update string                                       |
 //+------------------------------------------------------------------+
-string ExtractValueFromJson(string json, string key)
-{
-    string value = "";
-    int keyPos = StringFind(json, "\"" + key + "\"");
-    if (keyPos != -1) {
-        int colonPos = StringFind(json, ":", keyPos);
-        if (colonPos != -1) {
-            // Handle array values
-            if (StringGetCharacter(StringSubstr(json, colonPos + 1, 1), 0) == '[') {
-                int arrayStart = StringFind(json, "[", colonPos);
-                int arrayEnd = StringFind(json, "]", arrayStart);
-                if (arrayStart != -1 && arrayEnd != -1) {
-                    value = StringSubstr(json, arrayStart, arrayEnd - arrayStart + 1);
-                }
-            }
-            // Handle string values
-            else {
-                int valueStart = StringFind(json, "\"", colonPos) + 1;
-                int valueEnd = StringFind(json, "\"", valueStart);
-                if (valueStart != 0 && valueEnd != -1) {
-                    value = StringSubstr(json, valueStart, valueEnd - valueStart);
-                }
-            }
-        }
+string CreateUpdateString() {
+    string accountInfo = StringFormat("ACCOUNT|%.2f;%.2f;%.2f;%.2f",
+        AccountBalance(),
+        AccountEquity(),
+        AccountProfit(),
+        AccountFreeMargin()
+    );
+    
+    string positions = "|POSITIONS|";
+    
+    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+        if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+        if(OrderMagicNumber() != MAGICMA) continue;
+        
+        positions += StringFormat("%d,%s,%s,%.2f,%.4f,%.4f,%.4f,%.2f,%.2f,%s;",
+            OrderTicket(),
+            OrderSymbol(),
+            OrderType() == OP_BUY ? "buy" : "sell",
+            OrderLots(),
+            OrderOpenPrice(),
+            OrderStopLoss(),
+            OrderTakeProfit(),
+            OrderCommission(),
+            OrderProfit(),
+            OrderComment()
+        );
     }
-    return value;
+    
+    return accountInfo + positions;
 }
 
 //+------------------------------------------------------------------+
-//| Process single command                                            |
+//| Process command from server                                        |
 //+------------------------------------------------------------------+
-void ProcessCommand(string rawCommand)
-{
-    // Skip if empty command
-    if (StringLen(rawCommand) == 0) return;
-    
-    // Remove array brackets and quotes if present
-    if (StringGetChar(rawCommand, 0) == '[') rawCommand = StringSubstr(rawCommand, 1);
-    if (StringGetChar(rawCommand, StringLen(rawCommand)-1) == ']') rawCommand = StringSubstr(rawCommand, 0, StringLen(rawCommand)-1);
-    if (StringGetChar(rawCommand, 0) == '"') rawCommand = StringSubstr(rawCommand, 1);
-    if (StringGetChar(rawCommand, StringLen(rawCommand)-1) == '"') rawCommand = StringSubstr(rawCommand, 0, StringLen(rawCommand)-1);
-    
-    // Split command into parts
+void ProcessCommand(string command) {
     string parts[];
-    StringSplit(rawCommand, ',', parts);
+    StringSplit(command, ',', parts);
     
-    if (ArraySize(parts) < 2) return;
+    if(ArraySize(parts) < 2) return;
     
     string action = parts[0];
     string symbol = parts[1];
     
-    // Handle history requests
-    if (action == "GET_HISTORY") {
-        SendHistoryData(symbol);
-        return;
-    }
-    
-    // Handle trade commands
-    double qty = 0.1;  // default lot size
-    double price = 0;
-    double sl = 0;
-    double tp = 0;
+    double risk = 0.01;     // Default risk
+    double sl = 0;          // Default stop loss
+    double tp = 0;          // Default take profit
     string comment = "Web Terminal";
     
-    // Process parameters
-    for (int i = 2; i < ArraySize(parts); i++) {
-        string param = parts[i];
-        string key_value[];
-        StringSplit(param, '=', key_value);
+    // Parse parameters
+    for(int i = 2; i < ArraySize(parts); i++) {
+        string paramParts[];
+        StringSplit(parts[i], '=', paramParts);
+        if(ArraySize(paramParts) != 2) continue;
         
-        if (ArraySize(key_value) != 2) continue;
+        string paramName = paramParts[0];
+        string paramValue = paramParts[1];
         
-        string key = key_value[0];
-        string value = key_value[1];
-        
-        // Remove quotes if present
-        if (StringGetChar(value, 0) == '"') value = StringSubstr(value, 1);
-        if (StringGetChar(value, StringLen(value)-1) == '"') value = StringSubstr(value, 0, StringLen(value)-1);
-        
-        if (key == "risk") qty = StringToDouble(value);
-        else if (key == "price") price = StringToDouble(value);
-        else if (key == "sl") sl = StringToDouble(value);
-        else if (key == "tp") tp = StringToDouble(value);
-        else if (key == "comment") comment = value;
+        if(paramName == "risk") risk = StringToDouble(paramValue);
+        else if(paramName == "sl") sl = StringToDouble(paramValue);
+        else if(paramName == "tp") tp = StringToDouble(paramValue);
+        else if(paramName == "comment") comment = paramValue;
     }
     
-    // Execute trade based on action
-    if (action == "buy") {
-        OrderSend(symbol, OP_BUY, qty, Ask, 3, sl, tp, comment, MAGICMA, 0, clrGreen);
-    }
-    else if (action == "sell") {
-        OrderSend(symbol, OP_SELL, qty, Bid, 3, sl, tp, comment, MAGICMA, 0, clrRed);
-    }
-    else if (action == "closelong" || action == "closeshort") {
-        CloseAllPositions(symbol, action == "closelong" ? OP_BUY : OP_SELL);
-    }
-    else if (action == "closeall") {
-        CloseAllPositions(symbol, -1);
+    // Execute command
+    if(action == "buy") OpenBuyOrder(symbol, risk, sl, tp, comment);
+    else if(action == "sell") OpenSellOrder(symbol, risk, sl, tp, comment);
+    else if(action == "close") CloseTrade(StringToInteger(symbol));
+    else if(action == "modify") ModifyTrade(StringToInteger(symbol), sl, tp);
+    else if(action == "delete") DeleteTrade(StringToInteger(symbol));
+}
+
+//+------------------------------------------------------------------+
+//| Open Buy Order                                                     |
+//+------------------------------------------------------------------+
+void OpenBuyOrder(string symbol, double risk, double sl, double tp, string comment) {
+    double lotSize = CalculateLotSize(symbol, risk);
+    int ticket = OrderSend(symbol, OP_BUY, lotSize, MarketInfo(symbol, MODE_ASK), 3, sl, tp, comment, MAGICMA);
+    
+    if(ticket < 0) {
+        Print("Error opening BUY order: ", GetLastError());
+    } else {
+        Print("BUY order opened: Ticket=", ticket);
     }
 }
 
 //+------------------------------------------------------------------+
-//| Get trade history for specified period                            |
+//| Open Sell Order                                                    |
 //+------------------------------------------------------------------+
-string GetTradeHistory(string period, string startDate="", string endDate="")
-{
-    datetime startTime = 0;
-    datetime endTime = TimeCurrent();
+void OpenSellOrder(string symbol, double risk, double sl, double tp, string comment) {
+    double lotSize = CalculateLotSize(symbol, risk);
+    int ticket = OrderSend(symbol, OP_SELL, lotSize, MarketInfo(symbol, MODE_BID), 3, sl, tp, comment, MAGICMA);
     
-    Print("Getting trade history - Period:", period);
-    
-    if(period == "today") {
-        startTime = StrToTime(TimeToStr(TimeCurrent(), TIME_DATE));
-        Print("Today's history - Start time:", TimeToStr(startTime));
+    if(ticket < 0) {
+        Print("Error opening SELL order: ", GetLastError());
+    } else {
+        Print("SELL order opened: Ticket=", ticket);
     }
-    else if(period == "last3days") {
-        startTime = TimeCurrent() - 3 * 24 * 60 * 60;
-        Print("Last 3 days history - Start time:", TimeToStr(startTime));
-    }
-    else if(period == "lastweek") {
-        startTime = TimeCurrent() - 7 * 24 * 60 * 60;
-        Print("Last week history - Start time:", TimeToStr(startTime));
-    }
-    else if(period == "lastmonth") {
-        startTime = TimeCurrent() - 30 * 24 * 60 * 60;
-        Print("Last month history - Start time:", TimeToStr(startTime));
-    }
-    else if(period == "last3months") {
-        startTime = TimeCurrent() - 90 * 24 * 60 * 60;
-        Print("Last 3 months history - Start time:", TimeToStr(startTime));
-    }
-    else if(period == "last6months") {
-        startTime = TimeCurrent() - 180 * 24 * 60 * 60;
-        Print("Last 6 months history - Start time:", TimeToStr(startTime));
-    }
-    else if(period == "custom" && startDate != "" && endDate != "") {
-        startTime = StrToTime(startDate);
-        endTime = StrToTime(endDate) + 24 * 60 * 60 - 1; // End of the day
-        Print("Custom period history - Start:", TimeToStr(startTime), " End:", TimeToStr(endDate));
+}
+
+//+------------------------------------------------------------------+
+//| Close Trade                                                        |
+//+------------------------------------------------------------------+
+void CloseTrade(int ticket) {
+    if(!OrderSelect(ticket, SELECT_BY_TICKET)) {
+        Print("Error selecting order: ", GetLastError());
+        return;
     }
     
+    if(OrderType() == OP_BUY) {
+        if(!OrderClose(ticket, OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), 3)) {
+            Print("Error closing BUY order: ", GetLastError());
+        }
+    }
+    else if(OrderType() == OP_SELL) {
+        if(!OrderClose(ticket, OrderLots(), MarketInfo(OrderSymbol(), MODE_ASK), 3)) {
+            Print("Error closing SELL order: ", GetLastError());
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Modify Trade                                                       |
+//+------------------------------------------------------------------+
+void ModifyTrade(int ticket, double sl, double tp) {
+    if(!OrderSelect(ticket, SELECT_BY_TICKET)) {
+        Print("Error selecting order: ", GetLastError());
+        return;
+    }
+    
+    if(!OrderModify(ticket, OrderOpenPrice(), sl, tp, 0)) {
+        Print("Error modifying order: ", GetLastError());
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Delete Trade                                                       |
+//+------------------------------------------------------------------+
+void DeleteTrade(int ticket) {
+    if(!OrderSelect(ticket, SELECT_BY_TICKET)) {
+        Print("Error selecting order: ", GetLastError());
+        return;
+    }
+    
+    if(!OrderDelete(ticket)) {
+        Print("Error deleting order: ", GetLastError());
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Calculate Lot Size based on Risk                                   |
+//+------------------------------------------------------------------+
+double CalculateLotSize(string symbol, double riskPercent) {
+    double accountValue = AccountBalance();
+    double riskAmount = accountValue * riskPercent;
+    
+    double lotStep = MarketInfo(symbol, MODE_LOTSTEP);
+    double minLot = MarketInfo(symbol, MODE_MINLOT);
+    double maxLot = MarketInfo(symbol, MODE_MAXLOT);
+    
+    double lotSize = NormalizeDouble(riskAmount / 1000.0, 2);  // Simple calculation
+    lotSize = MathMax(minLot, MathMin(maxLot, lotSize));
+    return NormalizeDouble(lotSize, 2);
+}
+
+//+------------------------------------------------------------------+
+//| Get Trade History                                                  |
+//+------------------------------------------------------------------+
+string GetTradeHistory(string symbol) {
     string history = "";
-    bool firstTrade = true;
-    int tradesFound = 0;
-    
-    Print("Searching for trades between ", TimeToStr(startTime), " and ", TimeToStr(endTime));
     
     for(int i = OrdersHistoryTotal() - 1; i >= 0; i--) {
-        if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) {
-            Print("Error selecting order ", i, " - Error:", GetLastError());
-            continue;
-        }
+        if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) continue;
+        if(OrderMagicNumber() != MAGICMA) continue;
+        if(symbol != "ALL" && OrderSymbol() != symbol) continue;
         
-        datetime closeTime = OrderCloseTime();
-        if(closeTime >= startTime && closeTime <= endTime) {
-            if(!firstTrade) history += ";";
-            
-            // Format: ticket,symbol,type,lots,openPrice,closePrice,openTime,closeTime,profit,commission,swap
-            history += OrderTicket() + ",";
-            history += OrderSymbol() + ",";
-            history += OrderType() + ",";
-            history += DoubleToStr(OrderLots(), 2) + ",";
-            history += DoubleToStr(OrderOpenPrice(), 5) + ",";
-            history += DoubleToStr(OrderClosePrice(), 5) + ",";
-            history += TimeToStr(OrderOpenTime(), TIME_DATE|TIME_SECONDS) + ",";
-            history += TimeToStr(OrderCloseTime(), TIME_DATE|TIME_SECONDS) + ",";
-            history += DoubleToStr(OrderProfit(), 2) + ",";
-            history += DoubleToStr(OrderCommission(), 2) + ",";
-            history += DoubleToStr(OrderSwap(), 2);
-            
-            firstTrade = false;
-            tradesFound++;
-            Print("Added trade #", OrderTicket(), " to history");
-        }
-    }
-    
-    Print("Found ", tradesFound, " trades in the specified period");
-    if(tradesFound == 0) {
-        Print("No trades found in the period");
-    } else {
-        Print("History string length: ", StringLen(history));
+        history += StringFormat("%d,%s,%s,%.2f,%.4f,%.4f,%.4f,%.2f,%.2f,%s,%s;",
+            OrderTicket(),
+            OrderSymbol(),
+            OrderType() == OP_BUY ? "buy" : "sell",
+            OrderLots(),
+            OrderOpenPrice(),
+            OrderClosePrice(),
+            OrderProfit(),
+            OrderCommission(),
+            OrderSwap(),
+            OrderComment(),
+            TimeToStr(OrderCloseTime())
+        );
     }
     
     return history;
 }
 
 //+------------------------------------------------------------------+
-//| Send update to server                                             |
+//| Process server response                                            |
 //+------------------------------------------------------------------+
-void SendUpdate()
-{
-    string data = CreateUpdateString();
-    Print("Sending data: ", data);
-    
-    string headers = "Content-Type: text/plain\r\n";
-    if(StringLen(ApiKey) > 0) {
-        headers += "X-API-Key: " + ApiKey + "\r\n";
-    }
-    
-    char post[];
-    StringToCharArray(data, post);
-    
-    char result[];
-    string resultHeaders;
-    
-    int res = WebRequest(
-        "POST",
-        ServerURL + "/api/mt4/update",
-        headers,
-        5000,
-        post,
-        result,
-        resultHeaders
-    );
-    
-    if(res == -1) {
-        lastError = "Update failed: " + GetLastError();
-        isConnected = false;
-    } else {
-        string response = CharArrayToString(result);
-        Print("Server response: ", response);
-        ProcessServerResponse(response);
-        isConnected = true;
-        lastError = "";
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Send data to server                                               |
-//+------------------------------------------------------------------+
-void SendToServer(string data)
-{
-    Print("Sending data: ", data);
-    
-    string headers = "Content-Type: text/plain\r\n";
-    if(StringLen(ApiKey) > 0) {
-        headers += "X-API-Key: " + ApiKey + "\r\n";
-    }
-    
-    char post[];
-    StringToCharArray(data, post);
-    
-    char result[];
-    string resultHeaders;
-    
-    int res = WebRequest(
-        "POST",
-        ServerURL + "/api/mt4/update",
-        headers,
-        5000,
-        post,
-        result,
-        resultHeaders
-    );
-    
-    if(res == -1) {
-        lastError = "Update failed: " + GetLastError();
-        isConnected = false;
-    } else {
-        string response = CharArrayToString(result);
-        Print("Server response: ", response);
-        ProcessServerResponse(response);
-        isConnected = true;
-        lastError = "";
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Send history data to the client                                    |
-//+------------------------------------------------------------------+
-void SendHistoryData(string symbol) {
-    string historyData = GetTradeHistory("ALL");
-    SendToServer(StringConcatenate("HISTORY|", historyData));
-}
-
-//+------------------------------------------------------------------+
-//| Close all positions for a given symbol and type                    |
-//+------------------------------------------------------------------+
-void CloseAllPositions(string symbol, int type = -1) {
-    for (int i = OrdersTotal() - 1; i >= 0; i--) {
-        if (!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        
-        // Skip if not our symbol
-        if (symbol != "" && OrderSymbol() != symbol) continue;
-        
-        // Skip if not our type (-1 means close all types)
-        if (type != -1 && OrderType() != type) continue;
-        
-        // Skip if not our EA's order
-        if (OrderMagicNumber() != MAGICMA) continue;
-        
-        bool result = false;
-        
-        RefreshRates();
-        
-        switch (OrderType()) {
-            case OP_BUY:
-                result = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), 3, clrRed);
-                break;
-            case OP_SELL:
-                result = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_ASK), 3, clrRed);
-                break;
-        }
-        
-        if (!result) {
-            Print("Failed to close order #", OrderTicket(), ": ", GetLastError());
-        }
+void ProcessServerResponse(string response) {
+    if(StringFind(response, "command") >= 0) {
+        // Extract command from response
+        int start = StringFind(response, "command") + 10;
+        int end = StringFind(response, "\"", start);
+        string command = StringSubstr(response, start, end - start);
+        ProcessCommand(command);
     }
 }
 
@@ -390,27 +263,25 @@ void OnTimer() {
     static datetime lastUpdate = 0;
     datetime currentTime = TimeCurrent();
     
-    // Only send update if enough time has passed
-    if (currentTime - lastUpdate >= UpdateInterval) {
+    if(currentTime - lastUpdate >= UpdateInterval) {
         SendUpdate();
         lastUpdate = currentTime;
     }
 }
 
 //+------------------------------------------------------------------+
+//| Send regular update                                                |
+//+------------------------------------------------------------------+
+void SendUpdate() {
+    string data = CreateUpdateString();
+    SendToServer(data);
+}
+
+//+------------------------------------------------------------------+
 //| Expert initialization function                                     |
 //+------------------------------------------------------------------+
 int OnInit() {
-    // Convert HTTP URL to WebSocket URL
-    wsUrl = StringReplace(ServerURL, "https://", "wss://");
-    wsUrl = StringReplace(wsUrl, "http://", "ws://");
-    wsUrl = wsUrl + "/mt4";  // Add /mt4 path to identify as MT4 client
-    
-    Print("Connecting to WebSocket server: ", wsUrl);
-    
-    // Set up timer for regular updates
-    EventSetMillisecondTimer(UpdateInterval * 1000);
-    
+    EventSetMillisecondTimer(1000);
     return(INIT_SUCCEEDED);
 }
 
@@ -422,74 +293,34 @@ void OnDeinit(const int reason) {
 }
 
 //+------------------------------------------------------------------+
-//| Expert tick function                                             |
+//| Expert tick function                                               |
 //+------------------------------------------------------------------+
-void OnTick()
-{
+void OnTick() {
     string status = "Trading Terminal EA\n";
     status += "Server: " + ServerURL + "\n";
     status += "Connected: " + (isConnected ? "Yes" : "No") + "\n";
-    if(lastError != "") status += "Error: " + lastError + "\n";
+    if(lastError != "") status += "Last Error: " + lastError + "\n";
     Comment(status);
 }
 
 //+------------------------------------------------------------------+
-//| Chart event function                                              |
+//| String Split Function                                              |
 //+------------------------------------------------------------------+
-void OnChartEvent(const int id, const long& lparam, const double& dparam, const string& sparam)
-{
-    if(id == CHARTEVENT_CUSTOM+1) {
-        // Handle incoming WebSocket commands
-        if(StringFind(sparam, "COMMAND|") == 0) {
-            string command = StringSubstr(sparam, 8);
-            
-            if(StringFind(command, "GET_HISTORY|") == 0) {
-                string params = StringSubstr(command, 11);
-                string period = "";
-                datetime startDate = 0;
-                datetime endDate = 0;
-                
-                // Parse period and dates from params
-                string parts[];
-                int split = StringSplit(params, '|', parts);
-                if(split >= 1) period = parts[0];
-                if(split >= 3) {
-                    startDate = StringToTime(parts[1]);
-                    endDate = StringToTime(parts[2]);
-                }
-                
-                string historyData = GetTradeHistory(period, TimeToStr(startDate), TimeToStr(endDate));
-                
-                // Send history data using WebRequest
-                string headers = "Content-Type: application/json\r\n";
-                if(StringLen(ApiKey) > 0) {
-                    headers += "X-API-Key: " + ApiKey + "\r\n";
-                }
-                
-                char post[];
-                StringToCharArray(historyData, post);
-                
-                char result[];
-                string resultHeaders;
-                
-                int res = WebRequest(
-                    "POST",
-                    ServerURL + "/api/trade-history/ea",
-                    headers,
-                    5000,
-                    post,
-                    result,
-                    resultHeaders
-                );
-                
-                if(res == -1) {
-                    Print("Error sending history data: ", GetLastError());
-                } else {
-                    Print("History data sent successfully");
-                }
-                
-                return;
-            }
+void StringSplit(string str, string sep, string& arr[]) {
+    int pos = 0;
+    int count = 0;
+    
+    while(true) {
+        int nextPos = StringFind(str, sep, pos);
+        if(nextPos == -1) {
+            ArrayResize(arr, count + 1);
+            arr[count] = StringSubstr(str, pos);
+            break;
         }
+        
+        ArrayResize(arr, count + 1);
+        arr[count] = StringSubstr(str, pos, nextPos - pos);
+        count++;
+        pos = nextPos + StringLen(sep);
     }
 }
