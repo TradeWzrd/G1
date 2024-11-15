@@ -400,17 +400,34 @@ int OnInit() {
             );
             return(INIT_FAILED);
         }
+        Print("WebRequest failed with error: ", err);
+        return(INIT_FAILED);
     }
     
-    EventSetTimer(UpdateInterval);
+    // Set up timer for regular updates
+    if(!EventSetTimer(UpdateInterval)) {
+        Print("Failed to set timer with error: ", GetLastError());
+        return(INIT_FAILED);
+    }
+    
+    Print("EA initialized successfully");
+    Print("Server URL: ", ServerURL);
+    Print("Update Interval: ", UpdateInterval, " seconds");
+    Print("License ID: ", LicenseID);
+    
+    // Send initial update
+    SendUpdate();
+    CheckTradeCommands();
+    
     return(INIT_SUCCEEDED);
 }
 
 //+------------------------------------------------------------------+
-//| Expert deinitialization function                                   |
+//| Expert deinitialization function                                  |
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason) {
-    EventKillTimer();
+    EventKillTimer();  // Clean up timer
+    Print("EA removed - reason: ", reason);
 }
 
 //+------------------------------------------------------------------+

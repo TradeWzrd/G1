@@ -163,8 +163,9 @@ app.post('/api/trade', (req, res) => {
         return res.status(400).json({ error: 'Invalid action' });
     }
 
-    // Validate symbol
-    if (!/^[A-Za-z0-9]+$/.test(symbol.split('-')[0])) {
+    // Validate symbol - allow letters, numbers, and common symbol suffixes
+    const baseSymbol = symbol.split('-')[0];
+    if (!/^[A-Za-z0-9.#]+$/i.test(baseSymbol)) {
         return res.status(400).json({ error: 'Invalid symbol format' });
     }
 
