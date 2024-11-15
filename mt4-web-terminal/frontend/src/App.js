@@ -3,200 +3,144 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import WebTerminal from './components/WebTerminal';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 
 const App = () => {
+    const [accountData, setAccountData] = useState(null);
+    const [equityHistory, setEquityHistory] = useState([]);
     const [connected, setConnected] = useState(false);
     const [eaConnected, setEAConnected] = useState(false);
-    const [accountData, setAccountData] = useState(null);
-    const [positions, setPositions] = useState([]);
-    const [equityHistory, setEquityHistory] = useState([]);
+    const [error, setError] = useState(null);
+
+    // WebSocket reference and reconnection settings
     const ws = useRef(null);
     const reconnectAttempts = useRef(0);
     const maxReconnectAttempts = 5;
-    const reconnectTimeout = useRef(null);
+    const reconnectDelay = 2000;
+    const reconnectBackoff = 1.5;
 
-    useEffect(() => {
-        const connectWebSocket = () => {
-            // Clear any existing timeout
-            if (reconnectTimeout.current) {
-                clearTimeout(reconnectTimeout.current);
-                reconnectTimeout.current = null;
-            }
+    // Connect WebSocket function
+    const connectWebSocket = useCallback(() => {
+        if (ws.current?.readyState === WebSocket.OPEN) {
+            console.log('WebSocket already connected');
+            return;
+        }
 
-            // Don't try to reconnect if we're already connected
-            if (ws.current?.readyState === WebSocket.OPEN) {
-                console.log('WebSocket already connected');
-                return;
-            }
+        try {
+            ws.current = new WebSocket('wss://g1-back.onrender.com');
 
-            // Don't try to reconnect if we're in the process of connecting
-            if (ws.current?.readyState === WebSocket.CONNECTING) {
-                console.log('WebSocket is already connecting');
-                return;
-            }
+            ws.current.onopen = () => {
+                console.log('WebSocket Connected');
+                setConnected(true);
+                setError(null);
+                reconnectAttempts.current = 0;
+            };
 
-            try {
-                // Clean up existing connection if any
-                if (ws.current) {
-                    ws.current.close();
-                    ws.current = null;
-                }
+            ws.current.onclose = (event) => {
+                console.log('WebSocket Disconnected', event.code, event.reason);
+                setConnected(false);
+                setEAConnected(false);
 
-                reconnectAttempts.current++;
-                const wsUrl = 'wss://g1-back.onrender.com';
-                console.log(`Connecting to WebSocket (Attempt ${reconnectAttempts.current}/${maxReconnectAttempts}):`, wsUrl);
-                
-                ws.current = new WebSocket(wsUrl);
-
-                ws.current.onopen = () => {
-                    console.log('WebSocket connected successfully');
-                    setConnected(true);
-                    reconnectAttempts.current = 0;
-                    // toast.success('Connected to server');
-                };
-
-                ws.current.onclose = (event) => {
-                    console.log('WebSocket disconnected', event.code, event.reason);
-                    setConnected(false);
-                    setEAConnected(false);
+                if (reconnectAttempts.current < maxReconnectAttempts) {
+                    const delay = reconnectDelay * Math.pow(reconnectBackoff, reconnectAttempts.current);
+                    console.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
                     
-                    // Only attempt to reconnect if we haven't reached the maximum attempts
-                    if (reconnectAttempts.current < maxReconnectAttempts) {
-                        console.log(`Scheduling reconnect attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts}`);
-                        reconnectTimeout.current = setTimeout(connectWebSocket, 5000);
-                    } else {
-                        console.log('Max reconnection attempts reached');
-                        // toast.error('Connection lost. Please refresh the page.');
-                    }
-                };
-
-                ws.current.onerror = (error) => {
-                    console.error('WebSocket error:', error);
-                };
-
-                ws.current.onmessage = (event) => {
-                    try {
-                        const message = JSON.parse(event.data);
-                        console.log('Received message:', message);
-                        
-                        switch (message.type) {
-                            case 'update':
-                                if (message.data) {
-                                    if (message.data.account) {
-                                        const account = message.data.account;
-                                        setAccountData(prevData => ({
-                                            ...prevData,
-                                            balance: parseFloat(account.balance) || 0,
-                                            equity: parseFloat(account.equity) || 0,
-                                            margin: parseFloat(account.margin) || 0,
-                                            freeMargin: parseFloat(account.freeMargin) || 0,
-                                            number: account.number || 'N/A',
-                                            currency: account.currency || 'USD',
-                                            leverage: account.leverage || '1:100',
-                                            server: account.server || 'Unknown'
-                                        }));
-
-                                        // Update equity history
-                                        setEquityHistory(prev => [
-                                            ...prev,
-                                            {
-                                                timestamp: Date.now(),
-                                                equity: parseFloat(account.equity) || 0
-                                            }
-                                        ].slice(-100)); // Keep last 100 points
-                                    }
-
-                                    if (message.data.positions) {
-                                        setPositions(message.data.positions.map(pos => ({
-                                            ...pos,
-                                            lots: parseFloat(pos.lots) || 0,
-                                            openPrice: parseFloat(pos.openPrice) || 0,
-                                            sl: parseFloat(pos.sl) || 0,
-                                            tp: parseFloat(pos.tp) || 0,
-                                            commission: parseFloat(pos.commission) || 0,
-                                            profit: parseFloat(pos.profit) || 0
-                                        })));
-                                    }
-                                }
-                                // Update EA connection status from update message
-                                if (message.eaConnected !== undefined) {
-                                    setEAConnected(message.eaConnected);
-                                }
-                                break;
-
-                            case 'status':
-                                // Update EA connection status from status message
-                                if (message.eaConnected !== undefined) {
-                                    setEAConnected(message.eaConnected);
-                                }
-                                break;
-
-                            default:
-                                console.log('Unknown message type:', message.type);
-                        }
-                    } catch (error) {
-                        console.error('Error processing message:', error);
-                    }
-                };
-            } catch (error) {
-                console.error('Error creating WebSocket connection:', error);
-                if (reconnectAttempts.current >= maxReconnectAttempts) {
-                    // toast.error('Failed to establish connection. Please refresh the page.');
+                    setTimeout(() => {
+                        reconnectAttempts.current++;
+                        connectWebSocket();
+                    }, delay);
+                } else {
+                    setError('Unable to establish connection. Please refresh the page.');
                 }
-            }
-        };
+            };
 
+            ws.current.onerror = (error) => {
+                console.error('WebSocket Error:', error);
+                setError('Connection error occurred');
+            };
+
+            ws.current.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('Received data:', data);
+                    
+                    if (data.type === 'update' || data.type === 'status') {
+                        setEAConnected(data.connected);
+                        if (data.data) {
+                            // Update account data
+                            if (data.data.account) {
+                                setAccountData({
+                                    balance: parseFloat(data.data.account.balance || 0),
+                                    equity: parseFloat(data.data.account.equity || 0),
+                                    margin: parseFloat(data.data.account.margin || 0),
+                                    freeMargin: parseFloat(data.data.account.freeMargin || 0),
+                                    number: data.data.account.number || 'N/A',
+                                    currency: data.data.account.currency || 'USD',
+                                    leverage: data.data.account.leverage || '1:100',
+                                    server: data.data.account.server || 'Unknown'
+                                });
+
+                                // Update equity history
+                                if (data.data.account.equity) {
+                                    setEquityHistory(prev => [
+                                        ...prev,
+                                        {
+                                            time: new Date().toLocaleTimeString(),
+                                            value: parseFloat(data.data.account.equity)
+                                        }
+                                    ].slice(-20)); // Keep last 20 points
+                                }
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error processing message:', error);
+                }
+            };
+        } catch (error) {
+            console.error('Error creating WebSocket:', error);
+            setError('Failed to create WebSocket connection');
+        }
+    }, []);
+
+    // Initialize WebSocket connection
+    useEffect(() => {
         connectWebSocket();
 
         return () => {
-            if (reconnectTimeout.current) {
-                clearTimeout(reconnectTimeout.current);
-            }
             if (ws.current) {
                 ws.current.close();
                 ws.current = null;
             }
         };
-    }, []); // Remove connected from dependencies
+    }, [connectWebSocket]);
 
     return (
         <BrowserRouter>
-            <div className="bg-[#0a0f1a] min-h-screen">
+            <Layout>
                 <Routes>
-                    <Route path="/" element={<Layout />}>
-                        <Route index element={
+                    <Route 
+                        path="/" 
+                        element={
                             <Dashboard 
-                                accountData={accountData}
+                                accountData={accountData} 
                                 equityHistory={equityHistory}
                                 connected={connected}
                                 eaConnected={eaConnected}
                             />
-                        } />
-                        <Route path="terminal" element={
+                        } 
+                    />
+                    <Route 
+                        path="/trading" 
+                        element={
                             <WebTerminal 
                                 accountData={accountData}
-                                positions={positions}
                                 connected={connected}
                                 eaConnected={eaConnected}
                             />
-                        } />
-                    </Route>
+                        } 
+                    />
                 </Routes>
-                <ToastContainer
-                    position="bottom-right"
-                    autoClose={2000}
-                    hideProgressBar
-                    newestOnTop={false}
-                    closeOnClick
-                    rtl={false}
-                    pauseOnFocusLoss={false}
-                    draggable={false}
-                    pauseOnHover={false}
-                    theme="dark"
-                />
-            </div>
+            </Layout>
         </BrowserRouter>
     );
 };

@@ -1,630 +1,593 @@
-#property copyright "Copyright 2024"
-#property link      ""
-#property version   "1.00"
+#property copyright "Simple Trading Terminal EA"
+#property version   "3.00"
 #property strict
 
-// External parameters
 extern string   ServerURL = "https://g1-back.onrender.com";  // Server URL
 extern string   ApiKey = "";                                 // API Key
 extern int      UpdateInterval = 3;                         // Update interval in seconds
-extern string   LicenseID = "60123456789";                 // License ID for command validation
-
-// Magic number for identifying our trades
-#define MAGICMA 20240101
 
 // Global variables
 bool isConnected = false;
 string lastError = "";
-datetime lastUpdateTime = 0;
 
 //+------------------------------------------------------------------+
-//| Get error message by error code                                    |
+//| Create simple data string                                         |
 //+------------------------------------------------------------------+
-string GetErrorText(int error_code)
+string CreateUpdateString()
 {
-    string error_string;
-    switch(error_code)
-    {
-        case 0:   error_string="no error";                                                   break;
-        case 1:   error_string="no error, trade conditions not changed";                     break;
-        case 2:   error_string="common error";                                              break;
-        case 3:   error_string="invalid trade parameters";                                  break;
-        case 4:   error_string="trade server is busy";                                      break;
-        case 5:   error_string="old version of the client terminal";                        break;
-        case 6:   error_string="no connection with trade server";                           break;
-        case 7:   error_string="not enough rights";                                         break;
-        case 8:   error_string="too frequent requests";                                     break;
-        case 9:   error_string="malfunctional trade operation";                            break;
-        case 64:  error_string="account disabled";                                          break;
-        case 65:  error_string="invalid account";                                           break;
-        case 128: error_string="trade timeout";                                             break;
-        case 129: error_string="invalid price";                                             break;
-        case 130: error_string="invalid stops";                                             break;
-        case 131: error_string="invalid trade volume";                                      break;
-        case 132: error_string="market is closed";                                          break;
-        case 133: error_string="trade is disabled";                                         break;
-        case 134: error_string="not enough money";                                          break;
-        case 135: error_string="price changed";                                             break;
-        case 136: error_string="off quotes";                                                break;
-        case 137: error_string="broker is busy";                                            break;
-        case 138: error_string="requote";                                                   break;
-        case 139: error_string="order is locked";                                           break;
-        case 140: error_string="long positions only allowed";                               break;
-        case 141: error_string="too many requests";                                         break;
-        case 145: error_string="modification denied because order too close to market";      break;
-        case 146: error_string="trade context is busy";                                     break;
-        case 147: error_string="expirations are denied by broker";                          break;
-        case 148: error_string="amount of open and pending orders has reached the limit";    break;
-        case 149: error_string="hedging is prohibited";                                     break;
-        case 150: error_string="prohibited by FIFO rules";                                  break;
-        case 4000: error_string="no error";                                                 break;
-        case 4001: error_string="wrong function pointer";                                   break;
-        case 4002: error_string="array index is out of range";                             break;
-        case 4003: error_string="no memory for function call stack";                        break;
-        case 4004: error_string="recursive stack overflow";                                 break;
-        case 4005: error_string="not enough stack for parameter";                          break;
-        case 4006: error_string="no memory for parameter string";                          break;
-        case 4007: error_string="no memory for temp string";                               break;
-        case 4008: error_string="not initialized string";                                  break;
-        case 4009: error_string="not initialized string in array";                         break;
-        case 4010: error_string="no memory for array string";                              break;
-        case 4011: error_string="too long string";                                         break;
-        case 4012: error_string="remainder from zero divide";                              break;
-        case 4013: error_string="zero divide";                                             break;
-        case 4014: error_string="unknown command";                                         break;
-        case 4015: error_string="wrong jump (never generated error)";                      break;
-        case 4016: error_string="not initialized array";                                   break;
-        case 4017: error_string="dll calls are not allowed";                              break;
-        case 4018: error_string="cannot load library";                                     break;
-        case 4019: error_string="cannot call function";                                    break;
-        case 4020: error_string="expert function calls are not allowed";                   break;
-        case 4021: error_string="not enough memory for temp string returned from function"; break;
-        case 4022: error_string="system is busy (never generated error)";                  break;
-        case 4050: error_string="invalid function parameters count";                       break;
-        case 4051: error_string="invalid function parameter value";                        break;
-        case 4052: error_string="string function internal error";                          break;
-        case 4053: error_string="some array error";                                        break;
-        case 4054: error_string="incorrect series array using";                            break;
-        case 4055: error_string="custom indicator error";                                  break;
-        case 4056: error_string="arrays are incompatible";                                 break;
-        case 4057: error_string="global variables processing error";                       break;
-        case 4058: error_string="global variable not found";                               break;
-        case 4059: error_string="function is not allowed in testing mode";                 break;
-        case 4060: error_string="function is not confirmed";                               break;
-        case 4061: error_string="send mail error";                                         break;
-        case 4062: error_string="string parameter expected";                               break;
-        case 4063: error_string="integer parameter expected";                              break;
-        case 4064: error_string="double parameter expected";                               break;
-        case 4065: error_string="array as parameter expected";                             break;
-        case 4066: error_string="requested history data in update state";                  break;
-        case 4099: error_string="end of file";                                             break;
-        case 4100: error_string="some file error";                                         break;
-        case 4101: error_string="wrong file name";                                         break;
-        case 4102: error_string="too many opened files";                                   break;
-        case 4103: error_string="cannot open file";                                        break;
-        case 4104: error_string="incompatible access to a file";                           break;
-        case 4105: error_string="no order selected";                                       break;
-        case 4106: error_string="unknown symbol";                                          break;
-        case 4107: error_string="invalid price parameter for trade function";              break;
-        case 4108: error_string="invalid ticket";                                          break;
-        case 4109: error_string="trade is not allowed";                                    break;
-        case 4110: error_string="longs are not allowed";                                   break;
-        case 4111: error_string="shorts are not allowed";                                  break;
-        case 4200: error_string="object is already exist";                                 break;
-        case 4201: error_string="unknown object property";                                 break;
-        case 4202: error_string="object is not exist";                                     break;
-        case 4203: error_string="unknown object type";                                     break;
-        case 4204: error_string="no object name";                                          break;
-        case 4205: error_string="object coordinates error";                                break;
-        case 4206: error_string="no specified subwindow";                                  break;
-        default:   error_string="unknown error";
-    }
-    return(error_string);
-}
-
-//+------------------------------------------------------------------+
-//| Send data to server                                                |
-//+------------------------------------------------------------------+
-bool SendToServer(string data) {
-    string url = ServerURL + "/api/mt4/update";
-    char post[];
-    char result[];
-    string resultHeaders;
-    string cookie=NULL;
+    // Format: ACCOUNT|balance;equity;margin;freeMargin|POSITIONS|ticket,symbol,type,lots,openPrice,sl,tp,profit
+    string data = "ACCOUNT|";
     
-    // Convert string to char array for sending
-    int len = StringLen(data);
-    ArrayResize(post, len);
-    for(int i = 0; i < len; i++) {
-        post[i] = StringGetChar(data, i);
-    }
+    // Account data
+    data += DoubleToStr(AccountBalance(), 2) + ";";
+    data += DoubleToStr(AccountEquity(), 2) + ";";
+    data += DoubleToStr(AccountMargin(), 2) + ";";
+    data += DoubleToStr(AccountFreeMargin(), 2);
     
-    Print("Sending data: ", data);  // Debug print
-    
-    ResetLastError();
-    int res = WebRequest(
-        "POST",                // Method
-        url,                   // URL
-        cookie,                // Cookie
-        NULL,                  // Referer
-        5000,                  // Timeout
-        post,                  // Post data
-        ArraySize(post),       // Data size
-        result,                // Result
-        resultHeaders          // Response headers
-    );
-    
-    if(res == -1) {
-        int error = GetLastError();
-        Print("Error in WebRequest: ", error, " - ", GetErrorText(error));
-        isConnected = false;
-        return false;
-    } else {
-        isConnected = true;
-        lastUpdateTime = TimeLocal();
-        return true;
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Create account update string                                       |
-//+------------------------------------------------------------------+
-string CreateUpdateString() {
-    string accountInfo = StringFormat("ACCOUNT|%.2f;%.2f;%.2f;%.2f",
-        AccountBalance(),
-        AccountEquity(),
-        AccountMargin(),
-        AccountFreeMargin()
-    );
-    
-    string positions = "|POSITIONS|";
+    // Add positions
+    data += "|POSITIONS|";
+    bool firstPosition = true;
     
     for(int i = 0; i < OrdersTotal(); i++) {
-        if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        
-        positions += StringFormat("%d,%s,%d,%.2f,%.5f,%.5f,%.5f,%.2f,%.2f,%s;",
-            OrderTicket(),
-            OrderSymbol(),
-            OrderType(),
-            OrderLots(),
-            OrderOpenPrice(),
-            OrderStopLoss(),
-            OrderTakeProfit(),
-            OrderCommission(),
-            OrderProfit(),
-            OrderComment()
-        );
+        if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
+            if(!firstPosition) data += ";";
+            
+            data += OrderTicket() + ",";
+            data += OrderSymbol() + ",";
+            data += OrderType() + ",";
+            data += DoubleToStr(OrderLots(), 2) + ",";
+            data += DoubleToStr(OrderOpenPrice(), 5) + ",";
+            data += DoubleToStr(OrderStopLoss(), 5) + ",";
+            data += DoubleToStr(OrderTakeProfit(), 5) + ",";
+            data += DoubleToStr(OrderProfit(), 2);
+            
+            firstPosition = false;
+        }
     }
     
-    string updateString = accountInfo + positions;
-    Print("Created update string: ", updateString);  // Debug print
-    return updateString;
+    return data;
 }
 
 //+------------------------------------------------------------------+
-//| Check for trade commands                                           |
+//| Process server response                                           |
 //+------------------------------------------------------------------+
-void CheckTradeCommands() {
-    string url = ServerURL + "/api/mt4/commands";
-    char result[];
-    string resultHeaders;
-    char empty[];
-    string cookie=NULL;
+void ProcessServerResponse(string response)
+{
+    Print("Processing server response: ", response);
     
-    ArrayResize(empty, 1);
-    empty[0] = 0;
-    
-    ResetLastError();
-    int res = WebRequest(
-        "GET",                 // Method
-        url,                   // URL
-        cookie,                // Cookie
-        NULL,                  // Referer
-        5000,                  // Timeout
-        empty,                 // Data
-        ArraySize(empty),      // Data size
-        result,                // Result
-        resultHeaders          // Response headers
-    );
-    
-    if(res != -1) {
-        string commands = CharArrayToString(result);
-        Print("Received commands: ", commands);  // Debug print
-        
-        // Skip empty responses
-        if(StringLen(commands) > 0 && StringFind(commands, "<!DOCTYPE") == -1) {
-            string trimmed = StringTrimRight(StringTrimLeft(commands));
-            // Skip empty JSON responses
-            if(trimmed != "\"\"" && trimmed != "") {
-                // Remove quotes if present
-                if(StringGetChar(trimmed, 0) == 34) { // 34 is ASCII for "
-                    trimmed = StringSubstr(trimmed, 1, StringLen(trimmed) - 2);
+    // Check if response contains commands
+    if (StringFind(response, "commands") != -1) {
+        string commandsStr = ExtractValueFromJson(response, "commands");
+        if (StringLen(commandsStr) > 0) {
+            ProcessCommand(commandsStr);
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Process JSON command                                               |
+//+------------------------------------------------------------------+
+string ExtractValueFromJson(string json, string key)
+{
+    string value = "";
+    int keyPos = StringFind(json, "\"" + key + "\"");
+    if (keyPos != -1) {
+        int colonPos = StringFind(json, ":", keyPos);
+        if (colonPos != -1) {
+            // Handle array values
+            if (StringGetCharacter(StringSubstr(json, colonPos + 1, 1), 0) == '[') {
+                int arrayStart = StringFind(json, "[", colonPos);
+                int arrayEnd = StringFind(json, "]", arrayStart);
+                if (arrayStart != -1 && arrayEnd != -1) {
+                    value = StringSubstr(json, arrayStart, arrayEnd - arrayStart + 1);
                 }
-                ProcessCommand(trimmed);
+            }
+            // Handle string values
+            else {
+                int valueStart = StringFind(json, "\"", colonPos) + 1;
+                int valueEnd = StringFind(json, "\"", valueStart);
+                if (valueStart != 0 && valueEnd != -1) {
+                    value = StringSubstr(json, valueStart, valueEnd - valueStart);
+                }
             }
         }
     }
+    return value;
 }
 
 //+------------------------------------------------------------------+
-//| Process trade command                                              |
+//| Process single command                                            |
 //+------------------------------------------------------------------+
-void ProcessCommand(string command) {
-    Print("Processing command: ", command);
+void ProcessCommand(string rawCommand)
+{
+    Print("Processing command: ", rawCommand);
+    
+    // Skip if empty command
+    if (StringLen(rawCommand) == 0) return;
+    
+    // Check if this is a JSON command
+    if (StringFind(rawCommand, "{") != -1) {
+        string command = ExtractValueFromJson(rawCommand, "command");
+        string requestId = ExtractValueFromJson(rawCommand, "requestId");
+        
+        if (StringLen(command) > 0) {
+            string parts[];
+            int numParts = StringSplit(command, '|', parts);
+            if (numParts > 0) {
+                string action = parts[0];
+                
+                if (action == "GET_HISTORY") {
+                    string period = numParts > 1 ? parts[1] : "ALL";
+                    string historyData = GetTradeHistory(period);
+                    
+                    // Append request ID if present
+                    if (StringLen(requestId) > 0) {
+                        historyData = StringConcatenate("HISTORY|REQUEST_ID|", requestId, "|", historyData);
+                    } else {
+                        historyData = StringConcatenate("HISTORY|", historyData);
+                    }
+                    
+                    SendToServer(historyData);
+                }
+                // Handle other commands here
+            }
+        }
+        return;
+    }
+    
+    // Handle non-JSON commands (legacy format)
     string parts[];
-    StringSplit(command, ',', parts);
+    int numParts = StringSplit(rawCommand, '|', parts);
+    if (numParts < 1) return;
     
-    // Validate command format
-    if(ArraySize(parts) < 3) {
-        Print("Invalid command format");
-        return;
-    }
+    string action = parts[0];
     
-    // Validate license ID
-    if(parts[0] != LicenseID) {
-        Print("Invalid license ID");
-        return;
-    }
-    
-    string action = parts[1];
-    StringToLower(action);  // Convert to lowercase using built-in function
-    string symbol = parts[2];
-    double lots = 0.01;   // Default lots
-    double sl = 0;        // Default stop loss
-    double tp = 0;        // Default take profit
-    
-    // Parse parameters
-    for(int i = 3; i < ArraySize(parts); i++) {
-        string paramParts[];
-        StringSplit(parts[i], '=', paramParts);
-        if(ArraySize(paramParts) != 2) continue;
+    if(action == "BUY" || action == "SELL") {
+        if(numParts < 5) {
+            Print("Invalid buy/sell command format");
+            return;
+        }
         
-        string paramName = paramParts[0];
-        StringToLower(paramName);  // Convert to lowercase using built-in function
-        string paramValue = StringTrimRight(StringTrimLeft(paramParts[1]));
+        string symbol = parts[1];
+        double lots = StringToDouble(parts[2]);
+        double sl = StringToDouble(parts[3]);
+        double tp = StringToDouble(parts[4]);
         
-        Print("Param: ", paramName, "=", paramValue);  // Debug print
+        int type = (action == "BUY") ? OP_BUY : OP_SELL;
         
-        if(paramName == "lots") lots = StringToDouble(paramValue);
-        else if(paramName == "sl") sl = StringToDouble(paramValue);
-        else if(paramName == "tp") tp = StringToDouble(paramValue);
-    }
-    
-    Print("Executing command - Action: ", action, ", Symbol: ", symbol, ", Lots: ", lots, ", SL: ", sl, ", TP: ", tp);
-    
-    // Validate and normalize lots
-    double lotStep = MarketInfo(symbol, MODE_LOTSTEP);
-    double minLot = MarketInfo(symbol, MODE_MINLOT);
-    double maxLot = MarketInfo(symbol, MODE_MAXLOT);
-    
-    lots = MathMax(minLot, MathMin(maxLot, NormalizeDouble(lots / lotStep, 0) * lotStep));
-    Print("Normalized lots: ", lots);
-    
-    // Execute command
-    if(action == "buy") {
-        double ask = MarketInfo(symbol, MODE_ASK);
-        Print("Opening BUY order at ", ask);
-        int ticket = OrderSend(symbol, OP_BUY, lots, ask, 3, sl, tp, "Web Terminal", MAGICMA);
+        RefreshRates();
+        double price = (type == OP_BUY) ? MarketInfo(symbol, MODE_ASK) : MarketInfo(symbol, MODE_BID);
+        
+        Print("Executing order: ", symbol, " ", type, " ", lots, " @ ", price, " sl:", sl, " tp:", tp);
+        
+        // Add some validation
+        if(lots <= 0) {
+            Print("Invalid lot size: ", lots);
+            return;
+        }
+        
+        if(price <= 0) {
+            Print("Invalid price: ", price);
+            return;
+        }
+        
+        int ticket = OrderSend(
+            symbol,          // Symbol
+            type,           // Operation
+            lots,           // Lots
+            price,          // Price
+            3,             // Slippage
+            sl,            // Stop Loss
+            tp,            // Take Profit
+            "Web Terminal", // Comment
+            0,             // Magic Number
+            0,             // Expiration
+            type == OP_BUY ? clrBlue : clrRed
+        );
+        
         if(ticket < 0) {
             int error = GetLastError();
-            Print("Error opening BUY order: ", error, " - ", GetErrorText(error));
+            Print("Order failed - Error: ", error);
+            switch(error) {
+                case ERR_INVALID_PRICE:
+                    Print("Invalid price level");
+                    break;
+                case ERR_INVALID_STOPS:
+                    Print("Invalid stops");
+                    break;
+                case ERR_INVALID_TRADE_VOLUME:
+                    Print("Invalid lot size");
+                    break;
+                case ERR_NOT_ENOUGH_MONEY:
+                    Print("Not enough money");
+                    break;
+                default:
+                    Print("Other error");
+                    break;
+            }
+        } else {
+            Print("Order executed successfully - Ticket: ", ticket);
         }
-        else Print("BUY order opened: Ticket=", ticket);
     }
-    else if(action == "sell") {
-        double bid = MarketInfo(symbol, MODE_BID);
-        Print("Opening SELL order at ", bid);
-        int ticket = OrderSend(symbol, OP_SELL, lots, bid, 3, sl, tp, "Web Terminal", MAGICMA);
-        if(ticket < 0) {
-            int error = GetLastError();
-            Print("Error opening SELL order: ", error, " - ", GetErrorText(error));
+    else if(StringFind(action, "CLOSEALL") == 0) {
+        Print("Executing Close All command");
+        int type = -1;
+        
+        // Check if type is specified
+        if(numParts > 1) {
+            type = StringToInteger(parts[1]);
+            Print("Closing all positions of type: ", type);
+        } else {
+            Print("Closing all positions");
         }
-        else Print("SELL order opened: Ticket=", ticket);
-    }
-    else if(action == "closelong" || action == "closeshort" || action == "closeall") {
+        
+        bool success = true;
         for(int i = OrdersTotal() - 1; i >= 0; i--) {
             if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
-                if(OrderMagicNumber() == MAGICMA && (OrderSymbol() == symbol || action == "closeall")) {
-                    if((action == "closelong" && OrderType() == OP_BUY) || 
-                       (action == "closeshort" && OrderType() == OP_SELL) ||
-                       action == "closeall") {
-                        bool result = OrderClose(OrderTicket(), OrderLots(), 
-                            OrderType() == OP_BUY ? MarketInfo(OrderSymbol(), MODE_BID) : MarketInfo(OrderSymbol(), MODE_ASK), 
-                            3);
-                        if(!result) {
-                            int error = GetLastError();
-                            Print("Error closing order: ", error, " - ", GetErrorText(error));
-                        }
+                // Check if we should close this position
+                if(type == -1 || OrderType() == type) {
+                    RefreshRates();
+                    double closePrice = OrderType() == OP_BUY ? 
+                        MarketInfo(OrderSymbol(), MODE_BID) : 
+                        MarketInfo(OrderSymbol(), MODE_ASK);
+                        
+                    bool result = OrderClose(OrderTicket(), OrderLots(), closePrice, 3);
+                    if(!result) {
+                        Print("Failed to close order #", OrderTicket(), " Error: ", GetLastError());
+                        success = false;
+                    } else {
+                        Print("Successfully closed order #", OrderTicket());
                     }
                 }
             }
         }
+        Print("Close All operation completed. Success: ", success);
     }
-    
-    // Send immediate update after trade execution
-    SendUpdate();
-}
-
-//+------------------------------------------------------------------+
-//| Timer function                                                     |
-//+------------------------------------------------------------------+
-void OnTimer() {
-    SendUpdate();
-    CheckTradeCommands();
-}
-
-//+------------------------------------------------------------------+
-//| Expert initialization function                                     |
-//+------------------------------------------------------------------+
-int OnInit() {
-    // Extract domain from server URL
-    string domain = ServerURL;
-    if(StringFind(domain, "https://") == 0) domain = StringSubstr(domain, 8);
-    else if(StringFind(domain, "http://") == 0) domain = StringSubstr(domain, 7);
-    
-    // Check if WebRequest is allowed
-    string cookie=NULL;
-    char empty[];
-    char result[];
-    string resultHeaders;
-    
-    ArrayResize(empty, 1);
-    empty[0] = 0;
-    
-    ResetLastError();
-    int ret = WebRequest(
-        "GET",                 // Method
-        "https://www.google.com", // URL
-        cookie,                // Cookie
-        NULL,                  // Referer
-        500,                   // Timeout
-        empty,                // Data
-        ArraySize(empty),     // Data size
-        result,               // Result
-        resultHeaders         // Response headers
-    );
-    
-    if(ret == -1) {
-        int err = GetLastError();
-        if(err == 4014) {  // ERR_FUNCTION_NOT_ALLOWED
-            Print("Please enable Allow WebRequest for listed URL in Tools -> Options -> Expert Advisors");
-            Print("Then add these URLs:");
-            Print(domain);
-            MessageBox(
-                "Please enable 'Allow WebRequest for listed URL' in Tools -> Options -> Expert Advisors\n" +
-                "Then add this URL:\n" + 
-                domain + "\n\n" +
-                "After adding the URL, remove and re-add the EA to the chart.",
-                "WebRequest Setup Required",
-                MB_ICONINFORMATION | MB_OK
-            );
-            return(INIT_FAILED);
+    else if(action == "CLOSE") {
+        if(numParts < 2) return;
+        
+        int ticket = StringToInteger(parts[1]);
+        double lots = OrderLots(); // Default to full position
+        
+        // If partial close is requested
+        if(numParts > 2) {
+            double percentage = StringToDouble(parts[2]);
+            if(percentage > 0 && percentage < 100) {
+                lots = NormalizeDouble(OrderLots() * percentage / 100, 2);
+            }
         }
-        Print("WebRequest failed with error: ", err);
-        return(INIT_FAILED);
-    }
-    
-    // Set up timer for regular updates
-    if(!EventSetTimer(UpdateInterval)) {
-        Print("Failed to set timer with error: ", GetLastError());
-        return(INIT_FAILED);
-    }
-    
-    Print("EA initialized successfully");
-    Print("Server URL: ", ServerURL);
-    Print("Update Interval: ", UpdateInterval, " seconds");
-    Print("License ID: ", LicenseID);
-    
-    // Send initial update
-    SendUpdate();
-    CheckTradeCommands();
-    
-    return(INIT_SUCCEEDED);
-}
-
-//+------------------------------------------------------------------+
-//| Expert deinitialization function                                  |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason) {
-    EventKillTimer();  // Clean up timer
-    Print("EA removed - reason: ", reason);
-}
-
-//+------------------------------------------------------------------+
-//| Send regular update                                                |
-//+------------------------------------------------------------------+
-void SendUpdate() {
-    string data = CreateUpdateString();
-    SendToServer(data);
-}
-
-//+------------------------------------------------------------------+
-//| Allow WebRequest for URL                                           |
-//+------------------------------------------------------------------+
-bool AllowWebRequest(string url) {
-    string terminal_data_path = TerminalInfoString(TERMINAL_DATA_PATH);
-    string filename = terminal_data_path + "\\MQL4\\config\\webservers.ini";
-    int handle = FileOpen(filename, FILE_READ|FILE_WRITE|FILE_TXT);
-    
-    if(handle == INVALID_HANDLE) {
-        Print("Error opening webservers.ini");
-        return false;
-    }
-    
-    string content = "";
-    while(!FileIsEnding(handle)) {
-        content += FileReadString(handle) + "\n";
-    }
-    
-    if(StringFind(content, url) < 0) {
-        FileSeek(handle, 0, SEEK_END);
-        FileWriteString(handle, url + "\n");
-    }
-    
-    FileClose(handle);
-    return true;
-}
-
-//+------------------------------------------------------------------+
-//| Open Buy Order                                                     |
-//+------------------------------------------------------------------+
-void OpenBuyOrder(string symbol, double risk, double sl, double tp, string comment) {
-    double lotSize = CalculateLotSize(symbol, risk);
-    int ticket = OrderSend(symbol, OP_BUY, lotSize, MarketInfo(symbol, MODE_ASK), 3, sl, tp, comment, MAGICMA);
-    
-    if(ticket < 0) {
-        Print("Error opening BUY order: ", GetLastError());
-    } else {
-        Print("BUY order opened: Ticket=", ticket);
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Open Sell Order                                                    |
-//+------------------------------------------------------------------+
-void OpenSellOrder(string symbol, double risk, double sl, double tp, string comment) {
-    double lotSize = CalculateLotSize(symbol, risk);
-    int ticket = OrderSend(symbol, OP_SELL, lotSize, MarketInfo(symbol, MODE_BID), 3, sl, tp, comment, MAGICMA);
-    
-    if(ticket < 0) {
-        Print("Error opening SELL order: ", GetLastError());
-    } else {
-        Print("SELL order opened: Ticket=", ticket);
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Close Trade                                                        |
-//+------------------------------------------------------------------+
-void CloseTrade(int ticket) {
-    if(!OrderSelect(ticket, SELECT_BY_TICKET)) {
-        Print("Error selecting order: ", GetLastError());
-        return;
-    }
-    
-    if(OrderType() == OP_BUY) {
-        if(!OrderClose(ticket, OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), 3)) {
-            Print("Error closing BUY order: ", GetLastError());
+        
+        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
+            RefreshRates();
+            double closePrice = OrderType() == OP_BUY ? 
+                MarketInfo(OrderSymbol(), MODE_BID) : 
+                MarketInfo(OrderSymbol(), MODE_ASK);
+                
+            bool result = OrderClose(ticket, lots, closePrice, 3);
+            if(!result) {
+                Print("Failed to close order #", ticket, " Error: ", GetLastError());
+            } else {
+                Print("Successfully closed order #", ticket, " Lots: ", lots);
+            }
         }
     }
-    else if(OrderType() == OP_SELL) {
-        if(!OrderClose(ticket, OrderLots(), MarketInfo(OrderSymbol(), MODE_ASK), 3)) {
-            Print("Error closing SELL order: ", GetLastError());
+    else if(action == "MODIFY") {
+        if(numParts < 4) return;
+        
+        int ticket = StringToInteger(parts[1]);
+        double sl = StringToDouble(parts[2]);
+        double tp = StringToDouble(parts[3]);
+        
+        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
+            bool result = OrderModify(ticket, OrderOpenPrice(), sl, tp, 0);
+            if(!result) {
+                Print("Failed to modify order #", ticket, " Error: ", GetLastError());
+            } else {
+                Print("Successfully modified order #", ticket);
+            }
         }
     }
+    else if(action == "BREAKEVEN") {
+        if(numParts < 2) return;
+        
+        int ticket = StringToInteger(parts[1]);
+        double pips = 0;
+        
+        // Optional pips buffer
+        if(numParts > 2) {
+            pips = StringToDouble(parts[2]);
+        }
+        
+        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
+            double openPrice = OrderOpenPrice();
+            double newSL = openPrice;
+            
+            // Add pips buffer if specified
+            if(pips > 0) {
+                double pipValue = MarketInfo(OrderSymbol(), MODE_POINT) * 10;
+                if(OrderType() == OP_BUY) {
+                    newSL += pips * pipValue;
+                } else if(OrderType() == OP_SELL) {
+                    newSL -= pips * pipValue;
+                }
+            }
+            
+            bool result = OrderModify(ticket, openPrice, newSL, OrderTakeProfit(), 0);
+            if(!result) {
+                Print("Failed to set breakeven for order #", ticket, " Error: ", GetLastError());
+            } else {
+                Print("Successfully set breakeven for order #", ticket);
+            }
+        }
+    }
+    else if(action == "GET_HISTORY") {
+        string period = numParts > 1 ? parts[1] : "ALL";
+        string historyData = GetTradeHistory(period);
+        historyData = StringConcatenate("HISTORY|", historyData);
+        SendToServer(historyData);
+    }
 }
 
 //+------------------------------------------------------------------+
-//| Modify Trade                                                       |
+//| Get trade history for specified period                            |
 //+------------------------------------------------------------------+
-void ModifyTrade(int ticket, double sl, double tp) {
-    if(!OrderSelect(ticket, SELECT_BY_TICKET)) {
-        Print("Error selecting order: ", GetLastError());
-        return;
+string GetTradeHistory(string period, string startDate="", string endDate="")
+{
+    datetime startTime = 0;
+    datetime endTime = TimeCurrent();
+    
+    Print("Getting trade history - Period:", period);
+    
+    if(period == "today") {
+        startTime = StrToTime(TimeToStr(TimeCurrent(), TIME_DATE));
+        Print("Today's history - Start time:", TimeToStr(startTime));
+    }
+    else if(period == "last3days") {
+        startTime = TimeCurrent() - 3 * 24 * 60 * 60;
+        Print("Last 3 days history - Start time:", TimeToStr(startTime));
+    }
+    else if(period == "lastweek") {
+        startTime = TimeCurrent() - 7 * 24 * 60 * 60;
+        Print("Last week history - Start time:", TimeToStr(startTime));
+    }
+    else if(period == "lastmonth") {
+        startTime = TimeCurrent() - 30 * 24 * 60 * 60;
+        Print("Last month history - Start time:", TimeToStr(startTime));
+    }
+    else if(period == "last3months") {
+        startTime = TimeCurrent() - 90 * 24 * 60 * 60;
+        Print("Last 3 months history - Start time:", TimeToStr(startTime));
+    }
+    else if(period == "last6months") {
+        startTime = TimeCurrent() - 180 * 24 * 60 * 60;
+        Print("Last 6 months history - Start time:", TimeToStr(startTime));
+    }
+    else if(period == "custom" && startDate != "" && endDate != "") {
+        startTime = StrToTime(startDate);
+        endTime = StrToTime(endDate) + 24 * 60 * 60 - 1; // End of the day
+        Print("Custom period history - Start:", TimeToStr(startTime), " End:", TimeToStr(endDate));
     }
     
-    if(!OrderModify(ticket, OrderOpenPrice(), sl, tp, 0)) {
-        Print("Error modifying order: ", GetLastError());
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Delete Trade                                                       |
-//+------------------------------------------------------------------+
-void DeleteTrade(int ticket) {
-    if(!OrderSelect(ticket, SELECT_BY_TICKET)) {
-        Print("Error selecting order: ", GetLastError());
-        return;
-    }
-    
-    if(!OrderDelete(ticket)) {
-        Print("Error deleting order: ", GetLastError());
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Calculate Lot Size based on Risk                                   |
-//+------------------------------------------------------------------+
-double CalculateLotSize(string symbol, double riskPercent) {
-    double accountValue = AccountBalance();
-    double riskAmount = accountValue * riskPercent;
-    
-    double lotStep = MarketInfo(symbol, MODE_LOTSTEP);
-    double minLot = MarketInfo(symbol, MODE_MINLOT);
-    double maxLot = MarketInfo(symbol, MODE_MAXLOT);
-    
-    double lotSize = NormalizeDouble(riskAmount / 1000.0, 2);  // Simple calculation
-    lotSize = MathMax(minLot, MathMin(maxLot, lotSize));
-    return NormalizeDouble(lotSize, 2);
-}
-
-//+------------------------------------------------------------------+
-//| Get Trade History                                                  |
-//+------------------------------------------------------------------+
-string GetTradeHistory(string symbol) {
     string history = "";
+    bool firstTrade = true;
+    int tradesFound = 0;
+    
+    Print("Searching for trades between ", TimeToStr(startTime), " and ", TimeToStr(endTime));
     
     for(int i = OrdersHistoryTotal() - 1; i >= 0; i--) {
-        if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) continue;
-        if(OrderMagicNumber() != MAGICMA) continue;
-        if(symbol != "ALL" && OrderSymbol() != symbol) continue;
+        if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) {
+            Print("Error selecting order ", i, " - Error:", GetLastError());
+            continue;
+        }
         
-        history += StringFormat("%d,%s,%s,%.2f,%.4f,%.4f,%.4f,%.2f,%.2f,%s,%s;",
-            OrderTicket(),
-            OrderSymbol(),
-            OrderType() == OP_BUY ? "buy" : "sell",
-            OrderLots(),
-            OrderOpenPrice(),
-            OrderClosePrice(),
-            OrderProfit(),
-            OrderCommission(),
-            OrderSwap(),
-            OrderComment(),
-            TimeToStr(OrderCloseTime())
-        );
+        datetime closeTime = OrderCloseTime();
+        if(closeTime >= startTime && closeTime <= endTime) {
+            if(!firstTrade) history += ";";
+            
+            // Format: ticket,symbol,type,lots,openPrice,closePrice,openTime,closeTime,profit,commission,swap
+            history += OrderTicket() + ",";
+            history += OrderSymbol() + ",";
+            history += OrderType() + ",";
+            history += DoubleToStr(OrderLots(), 2) + ",";
+            history += DoubleToStr(OrderOpenPrice(), 5) + ",";
+            history += DoubleToStr(OrderClosePrice(), 5) + ",";
+            history += TimeToStr(OrderOpenTime(), TIME_DATE|TIME_SECONDS) + ",";
+            history += TimeToStr(OrderCloseTime(), TIME_DATE|TIME_SECONDS) + ",";
+            history += DoubleToStr(OrderProfit(), 2) + ",";
+            history += DoubleToStr(OrderCommission(), 2) + ",";
+            history += DoubleToStr(OrderSwap(), 2);
+            
+            firstTrade = false;
+            tradesFound++;
+            Print("Added trade #", OrderTicket(), " to history");
+        }
+    }
+    
+    Print("Found ", tradesFound, " trades in the specified period");
+    if(tradesFound == 0) {
+        Print("No trades found in the period");
+    } else {
+        Print("History string length: ", StringLen(history));
     }
     
     return history;
 }
 
 //+------------------------------------------------------------------+
-//| Process server response                                            |
+//| Send update to server                                             |
 //+------------------------------------------------------------------+
-void ProcessServerResponse(string response) {
-    if(StringLen(response) > 0) {
-        ProcessCommand(response);
+void SendUpdate()
+{
+    string data = CreateUpdateString();
+    Print("Sending data: ", data);
+    
+    string headers = "Content-Type: text/plain\r\n";
+    if(StringLen(ApiKey) > 0) {
+        headers += "X-API-Key: " + ApiKey + "\r\n";
+    }
+    
+    char post[];
+    StringToCharArray(data, post);
+    
+    char result[];
+    string resultHeaders;
+    
+    int res = WebRequest(
+        "POST",
+        ServerURL + "/api/mt4/update",
+        headers,
+        5000,
+        post,
+        result,
+        resultHeaders
+    );
+    
+    if(res == -1) {
+        lastError = "Update failed: " + GetLastError();
+        isConnected = false;
+    } else {
+        string response = CharArrayToString(result);
+        Print("Server response: ", response);
+        ProcessServerResponse(response);
+        isConnected = true;
+        lastError = "";
     }
 }
 
 //+------------------------------------------------------------------+
-//| Expert tick function                                               |
+//| Send data to server                                               |
 //+------------------------------------------------------------------+
-void OnTick() {
+void SendToServer(string data)
+{
+    Print("Sending data: ", data);
+    
+    string headers = "Content-Type: text/plain\r\n";
+    if(StringLen(ApiKey) > 0) {
+        headers += "X-API-Key: " + ApiKey + "\r\n";
+    }
+    
+    char post[];
+    StringToCharArray(data, post);
+    
+    char result[];
+    string resultHeaders;
+    
+    int res = WebRequest(
+        "POST",
+        ServerURL + "/api/mt4/update",
+        headers,
+        5000,
+        post,
+        result,
+        resultHeaders
+    );
+    
+    if(res == -1) {
+        lastError = "Update failed: " + GetLastError();
+        isConnected = false;
+    } else {
+        string response = CharArrayToString(result);
+        Print("Server response: ", response);
+        ProcessServerResponse(response);
+        isConnected = true;
+        lastError = "";
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Timer function                                                    |
+//+------------------------------------------------------------------+
+void OnTimer()
+{
+    SendUpdate();
+}
+
+//+------------------------------------------------------------------+
+//| Expert initialization function                                    |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+    EventSetTimer(UpdateInterval);
+    return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+    EventKillTimer();
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+{
     string status = "Trading Terminal EA\n";
     status += "Server: " + ServerURL + "\n";
     status += "Connected: " + (isConnected ? "Yes" : "No") + "\n";
-    if(lastError != "") status += "Last Error: " + lastError + "\n";
+    if(lastError != "") status += "Error: " + lastError + "\n";
     Comment(status);
 }
 
 //+------------------------------------------------------------------+
-//| String Split Function                                              |
+//| Chart event function                                              |
 //+------------------------------------------------------------------+
-void StringSplit(string str, string sep, string& arr[]) {
-    int pos = 0;
-    int count = 0;
-    
-    while(true) {
-        int nextPos = StringFind(str, sep, pos);
-        if(nextPos == -1) {
-            ArrayResize(arr, count + 1);
-            arr[count] = StringSubstr(str, pos);
-            break;
+void OnChartEvent(const int id, const long& lparam, const double& dparam, const string& sparam)
+{
+    if(id == CHARTEVENT_CUSTOM+1) {
+        // Handle incoming WebSocket commands
+        if(StringFind(sparam, "COMMAND|") == 0) {
+            string command = StringSubstr(sparam, 8);
+            
+            if(StringFind(command, "GET_HISTORY|") == 0) {
+                string params = StringSubstr(command, 11);
+                string period = "";
+                datetime startDate = 0;
+                datetime endDate = 0;
+                
+                // Parse period and dates from params
+                string parts[];
+                int split = StringSplit(params, '|', parts);
+                if(split >= 1) period = parts[0];
+                if(split >= 3) {
+                    startDate = StringToTime(parts[1]);
+                    endDate = StringToTime(parts[2]);
+                }
+                
+                string historyData = GetTradeHistory(period, TimeToStr(startDate), TimeToStr(endDate));
+                
+                // Send history data using WebRequest
+                string headers = "Content-Type: application/json\r\n";
+                if(StringLen(ApiKey) > 0) {
+                    headers += "X-API-Key: " + ApiKey + "\r\n";
+                }
+                
+                char post[];
+                StringToCharArray(historyData, post);
+                
+                char result[];
+                string resultHeaders;
+                
+                int res = WebRequest(
+                    "POST",
+                    ServerURL + "/api/trade-history/ea",
+                    headers,
+                    5000,
+                    post,
+                    result,
+                    resultHeaders
+                );
+                
+                if(res == -1) {
+                    Print("Error sending history data: ", GetLastError());
+                } else {
+                    Print("History data sent successfully");
+                }
+                
+                return;
+            }
         }
-        
-        ArrayResize(arr, count + 1);
-        arr[count] = StringSubstr(str, pos, nextPos - pos);
-        count++;
-        pos = nextPos + StringLen(sep);
     }
 }

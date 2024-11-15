@@ -8,24 +8,45 @@ const morgan = require('morgan');
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
-const webClients = new Set();
 
-// Store latest account data and pending commands
-let latestAccountData = null;
+// Global variables
+const clients = new Set();
+let pendingCommands = []; 
+const historyRequests = new Map();
+const HISTORY_REQUEST_TIMEOUT = 30000; // 30 seconds
+
+// Clear timed out history requests
+setInterval(() => {
+    const now = Date.now();
+    for (const [requestId, request] of historyRequests.entries()) {
+        if (now - request.timestamp > HISTORY_REQUEST_TIMEOUT) {
+            console.log(`History request ${requestId} timed out`);
+            if (request.ws && request.ws.readyState === WebSocket.OPEN) {
+                request.ws.send(JSON.stringify({
+                    type: 'history_response',
+                    status: 'error',
+                    error: 'Request timed out',
+                    requestId
+                }));
+            }
+            historyRequests.delete(requestId);
+        }
+    }
+}, 10000);
+
+// Store trade history
+let tradeHistory = [];
+let lastUpdate = null;
 let eaConnected = false;
-let lastEAUpdate = Date.now();
-let pendingCommands = [];
+let lastEAUpdate = null;
 
-// License ID for PineConnector format
-const LICENSE_ID = "60123456789";  // Replace with actual license
-
-// Middleware
-app.use(express.text({ type: '*/*' }));  // Handle all content types as text
+// Use text parser instead of JSON parser for MT4 updates
+app.use(express.text());
 app.use(express.json());
 app.use(cors());
 app.use(morgan('dev'));
 
-// Parse MT4 update data
+// Function to parse incoming data
 function parseData(dataString) {
     try {
         if (typeof dataString !== 'string') {
@@ -33,46 +54,31 @@ function parseData(dataString) {
             return null;
         }
 
-        // Remove any quotes and trim whitespace
-        dataString = dataString.trim();
-        if (dataString.startsWith('"') && dataString.endsWith('"')) {
-            dataString = dataString.slice(1, -1);
-        }
-
-        console.log('Parsing data string:', dataString);
-
         const parts = dataString.split('|');
-        if (parts.length < 2) {
-            console.error('Invalid data format: not enough parts');
-            console.error('Parts:', parts);
-            return null;
-        }
+        if (parts.length < 2) return null;
 
         const data = {
             account: {},
-            positions: []
+            positions: [],
+            history: []
         };
 
         // Parse account data
         if (parts[0] === 'ACCOUNT' && parts[1]) {
-            const [balance, equity, margin, freeMargin] = parts[1].split(';').map(Number);
+            const [balance, equity, margin, freeMargin] = parts[1].split(';');
             data.account = {
-                balance,
-                equity,
-                margin,
-                freeMargin
+                balance: parseFloat(balance),
+                equity: parseFloat(equity),
+                margin: parseFloat(margin),
+                freeMargin: parseFloat(freeMargin)
             };
-        } else {
-            console.error('Invalid account data format');
-            console.error('First parts:', parts[0], parts[1]);
-            return null;
         }
 
         // Parse positions
         if (parts[2] === 'POSITIONS' && parts[3]) {
-            const positions = parts[3].split(';').filter(p => p);
-            data.positions = positions.map(pos => {
-                const [ticket, symbol, type, lots, openPrice, sl, tp, commission, profit, comment] = pos.split(',');
+            const positions = parts[3].split(';');
+            data.positions = positions.filter(p => p).map(pos => {
+                const [ticket, symbol, type, lots, openPrice, sl, tp, profit] = pos.split(',');
                 return {
                     ticket: parseInt(ticket),
                     symbol,
@@ -81,14 +87,11 @@ function parseData(dataString) {
                     openPrice: parseFloat(openPrice),
                     sl: parseFloat(sl),
                     tp: parseFloat(tp),
-                    commission: parseFloat(commission),
-                    profit: parseFloat(profit),
-                    comment
+                    profit: parseFloat(profit)
                 };
             });
         }
 
-        console.log('Parsed data:', data);
         return data;
     } catch (error) {
         console.error('Error parsing data:', error);
@@ -96,195 +99,506 @@ function parseData(dataString) {
     }
 }
 
-// Broadcast to web clients
-function broadcastToWeb(data) {
-    webClients.forEach(client => {
+// MT4 update endpoint
+app.post('/api/mt4/update', express.text(), (req, res) => {
+    try {
+        console.log('Received MT4 update:', req.body);
+
+        // Check if this is a history update
+        if (req.body.startsWith('HISTORY|')) {
+            const historyData = req.body.substring(8); // Remove 'HISTORY|'
+            console.log('Processing history data:', historyData);
+
+            // Extract request ID if present
+            let requestId = null;
+            let historyContent = historyData;
+            if (historyData.includes('REQUEST_ID|')) {
+                const parts = historyData.split('REQUEST_ID|');
+                requestId = parts[1].split('|')[0];
+                historyContent = parts[1].split('|')[1];
+            }
+
+            // Parse history data
+            const trades = historyContent.split(';').filter(Boolean).map(trade => {
+                const [
+                    ticket, symbol, type, lots, openPrice, closePrice, 
+                    openTime, closeTime, profit, commission, swap
+                ] = trade.split(',');
+                return {
+                    ticket: parseInt(ticket),
+                    symbol,
+                    type: parseInt(type),
+                    lots: parseFloat(lots),
+                    openPrice: parseFloat(openPrice),
+                    closePrice: parseFloat(closePrice),
+                    openTime: parseInt(openTime),
+                    closeTime: parseInt(closeTime),
+                    profit: parseFloat(profit),
+                    commission: parseFloat(commission),
+                    swap: parseFloat(swap)
+                };
+            });
+
+            // Update trade history
+            tradeHistory = trades;
+            lastUpdate = new Date().toISOString();
+
+            // Find the client who requested this history
+            const request = requestId ? historyRequests.get(requestId) : null;
+            if (request && request.ws && request.ws.readyState === WebSocket.OPEN) {
+                // Send response directly to requesting client
+                request.ws.send(JSON.stringify({
+                    type: 'history_response',
+                    status: 'success',
+                    requestId,
+                    data: trades
+                }));
+                historyRequests.delete(requestId);
+            } else {
+                // Broadcast to all clients if no specific requester
+                broadcast(JSON.stringify({
+                    type: 'history_data',
+                    data: trades
+                }));
+            }
+
+            res.status(200).send('History processed');
+            return;
+        }
+
+        // Regular account update
+        const data = parseData(req.body);
+        
+        if (data) {
+            lastUpdate = data;
+            eaConnected = true;
+            lastEAUpdate = Date.now();
+
+            // Get any pending commands and send them to EA
+            const commands = [...pendingCommands];
+            pendingCommands.length = 0; // Clear the array without reassignment
+            console.log('Sending pending commands to EA:', commands);
+
+            // Broadcast update to clients
+            broadcast({
+                type: 'update',
+                connected: true,
+                data: data
+            });
+
+            // Send response with pending commands
+            res.json({ 
+                success: true,
+                commands: commands 
+            });
+        } else {
+            console.log('Invalid data format received from MT4');
+            res.json({ 
+                success: false,
+                error: 'Invalid data format'
+            });
+        }
+    } catch (error) {
+        console.error('Error processing update:', error);
+        res.json({ 
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Process EA data
+app.post('/api/ea-data', (req, res) => {
+    const data = req.body.data;
+    if (!data) {
+        return res.status(400).json({ error: 'No data provided' });
+    }
+
+    try {
+        // Split data into sections
+        const [accountSection, positionsSection, historySection] = data.split('|POSITIONS|');
+        const [_, accountData] = accountSection.split('|');
+        const [balance, equity, margin, freeMargin] = accountData.split(';');
+
+        // Process account data
+        const account = {
+            balance: parseFloat(balance),
+            equity: parseFloat(equity),
+            margin: parseFloat(margin),
+            freeMargin: parseFloat(freeMargin)
+        };
+
+        // Process positions
+        const positions = [];
+        if (positionsSection) {
+            const [posData, histData] = positionsSection.split('|HISTORY|');
+            if (posData) {
+                const positionStrings = posData.split(';');
+                positionStrings.forEach(pos => {
+                    if (pos) {
+                        const [ticket, symbol, type, lots, openPrice, sl, tp, profit] = pos.split(',');
+                        positions.push({
+                            ticket: parseInt(ticket),
+                            symbol,
+                            type: parseInt(type),
+                            lots: parseFloat(lots),
+                            openPrice: parseFloat(openPrice),
+                            sl: parseFloat(sl),
+                            tp: parseFloat(tp),
+                            profit: parseFloat(profit)
+                        });
+                    }
+                });
+            }
+        }
+
+        // Process history
+        if (historySection) {
+            const historyStrings = historySection.split(';');
+            historyStrings.forEach(hist => {
+                if (hist) {
+                    const [ticket, symbol, type, lots, openPrice, closePrice, openTime, closeTime, profit, commission, swap] = hist.split(',');
+                    const trade = {
+                        ticket: parseInt(ticket),
+                        symbol,
+                        type: parseInt(type),
+                        lots: parseFloat(lots),
+                        openPrice: parseFloat(openPrice),
+                        closePrice: parseFloat(closePrice),
+                        openTime: new Date(openTime),
+                        closeTime: new Date(closeTime),
+                        profit: parseFloat(profit),
+                        commission: parseFloat(commission),
+                        swap: parseFloat(swap),
+                        total: parseFloat(profit) + parseFloat(commission) + parseFloat(swap)
+                    };
+                    
+                    // Only add if not already in history
+                    if (!tradeHistory.find(t => t.ticket === trade.ticket)) {
+                        tradeHistory.push(trade);
+                    }
+                }
+            });
+        }
+
+        // Update last update
+        lastUpdate = { account, positions };
+        eaConnected = true;
+        lastEAUpdate = Date.now();
+
+        // Broadcast update to all connected clients
+        wss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                    type: 'update',
+                    connected: true,
+                    data: lastUpdate
+                }));
+            }
+        });
+
+        res.json({ status: 'ok' });
+    } catch (error) {
+        console.error('Error processing EA data:', error);
+        res.status(500).json({ error: 'Error processing data' });
+    }
+});
+
+// Get trade history with filters
+app.get('/api/trade-history', (req, res) => {
+    try {
+        const { period } = req.query;
+        let filteredHistory = [...tradeHistory];
+        
+        const now = new Date();
+        switch (period) {
+            case 'today':
+                filteredHistory = tradeHistory.filter(trade => 
+                    trade.closeTime.toDateString() === now.toDateString()
+                );
+                break;
+            case 'last3days':
+                const threeDaysAgo = new Date(now - 3 * 24 * 60 * 60 * 1000);
+                filteredHistory = tradeHistory.filter(trade => 
+                    trade.closeTime >= threeDaysAgo
+                );
+                break;
+            case 'lastWeek':
+                const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+                filteredHistory = tradeHistory.filter(trade => 
+                    trade.closeTime >= weekAgo
+                );
+                break;
+            case 'lastMonth':
+                const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+                filteredHistory = tradeHistory.filter(trade => 
+                    trade.closeTime >= monthAgo
+                );
+                break;
+            case 'last3Months':
+                const threeMonthsAgo = new Date(now - 90 * 24 * 60 * 60 * 1000);
+                filteredHistory = tradeHistory.filter(trade => 
+                    trade.closeTime >= threeMonthsAgo
+                );
+                break;
+            case 'last6Months':
+                const sixMonthsAgo = new Date(now - 180 * 24 * 60 * 60 * 1000);
+                filteredHistory = tradeHistory.filter(trade => 
+                    trade.closeTime >= sixMonthsAgo
+                );
+                break;
+            case 'custom':
+                const { startDate, endDate } = req.query;
+                if (startDate && endDate) {
+                    filteredHistory = tradeHistory.filter(trade => 
+                        trade.closeTime >= new Date(startDate) && 
+                        trade.closeTime <= new Date(endDate)
+                    );
+                }
+                break;
+        }
+        
+        res.json(filteredHistory.sort((a, b) => b.closeTime - a.closeTime));
+    } catch (error) {
+        console.error('Error fetching trade history:', error);
+        res.status(500).json({ error: 'Error fetching trade history' });
+    }
+});
+
+// Get trade history with filters and send request to EA
+app.get('/api/trade-history/ea', (req, res) => {
+    const { period, startDate, endDate } = req.query;
+    const requestId = Date.now().toString();
+    
+    // Store the response object to resolve later
+    historyRequests.set(requestId, res);
+    
+    // Send command to EA
+    let command = `GET_HISTORY|${period}`;
+    if (period === 'custom') {
+        command += `|${startDate}|${endDate}`;
+    }
+    
+    // Send the command to all connected clients
+    wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(data));
+            client.send(`COMMAND|${command}`);
+        }
+    });
+    
+    // Set timeout to clean up if no response
+    setTimeout(() => {
+        if (historyRequests.has(requestId)) {
+            historyRequests.delete(requestId);
+            res.status(408).json({ error: 'Request timeout' });
+        }
+    }, 30000); // 30 second timeout
+});
+
+// Trade command handler
+app.post('/api/trade', (req, res) => {
+    try {
+        const command = req.body;
+        console.log('Received trade command:', command);
+
+        // Different validation for different actions
+        if (command.action === 'closeAll') {
+            const formattedCommand = 'CLOSEALL';
+            console.log('Formatted close all command:', formattedCommand);
+            pendingCommands.push(formattedCommand);
+            
+            return res.json({
+                success: true,
+                message: 'Close all command queued'
+            });
+        } 
+        else if (command.action === 'open') {
+            // Validate open trade parameters
+            if (!command.symbol || command.type === undefined || !command.lots) {
+                return res.json({
+                    success: false,
+                    error: 'Missing required trade parameters'
+                });
+            }
+
+            const formattedCommand = `${command.type === 0 ? 'BUY' : 'SELL'},${command.symbol},${command.lots},${command.stopLoss || 0},${command.takeProfit || 0}`;
+            console.log('Formatted open command:', formattedCommand);
+            pendingCommands.push(formattedCommand);
+
+            return res.json({
+                success: true,
+                message: 'Trade command queued'
+            });
+        }
+        else if (command.action === 'close') {
+            if (!command.ticket) {
+                return res.json({
+                    success: false,
+                    error: 'Missing ticket number'
+                });
+            }
+
+            const formattedCommand = `CLOSE,${command.ticket}`;
+            console.log('Formatted close command:', formattedCommand);
+            pendingCommands.push(formattedCommand);
+
+            return res.json({
+                success: true,
+                message: 'Close command queued'
+            });
+        }
+        else {
+            return res.json({
+                success: false,
+                error: 'Invalid action'
+            });
+        }
+    } catch (error) {
+        console.error('Trade error:', error);
+        res.json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Get pending commands
+app.get('/api/trade/pending', (req, res) => {
+    res.json({ commands: pendingCommands });
+});
+
+// Broadcast function
+function broadcast(data) {
+    const message = JSON.stringify(data);
+    clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
         }
     });
 }
 
-// MT4 EA update endpoint
-app.post('/api/mt4/update', (req, res) => {
-    const rawData = req.body;
-    console.log('Received raw MT4 update:', rawData);
-    
-    const data = parseData(rawData);
-    if (!data) {
-        console.error('Failed to parse data');
-        return res.status(400).send('Invalid data format');
-    }
-
-    latestAccountData = data;
-    lastEAUpdate = Date.now();
-    eaConnected = true;
-
-    // Broadcast update to web clients
-    broadcastToWeb({
-        type: 'update',
-        data,
-        connected: true,
-        eaConnected: true,
-        timestamp: Date.now()
-    });
-
-    res.send('OK');
-});
-
-// EA command polling endpoint
-app.get('/api/mt4/commands', (req, res) => {
-    if (pendingCommands.length > 0) {
-        const command = pendingCommands.shift(); // Get and remove first command
-        console.log('Sending command to EA:', command);
-        res.send(command); // Send as plain text, not JSON
-    } else {
-        res.send(''); // No commands pending
-    }
-});
-
-// Trade command endpoint
-app.post('/api/trade', (req, res) => {
-    if (!eaConnected) {
-        return res.status(503).json({ error: 'EA is not connected' });
-    }
-
-    const { action, symbol, params } = req.body;
-    console.log('Trade command received:', req.body);
-
-    // Validate required parameters
-    if (!action || !symbol) {
-        return res.status(400).json({ error: 'Missing required parameters' });
-    }
-
-    // Validate action
-    const validActions = ['buy', 'sell', 'close'];
-    if (!validActions.includes(action.toLowerCase())) {
-        return res.status(400).json({ error: 'Invalid action' });
-    }
-
-    // Validate symbol - allow letters, numbers, and common symbol suffixes
-    const baseSymbol = symbol.split('-')[0];
-    if (!/^[A-Za-z0-9.#]+$/i.test(baseSymbol)) {
-        return res.status(400).json({ error: 'Invalid symbol format' });
-    }
-
-    // Format command string in PineConnector format
-    let command = LICENSE_ID + ',';
-    
-    try {
-        if (action === 'buy') {
-            command += 'buy,' + symbol;
-            if (params) {
-                // Validate and normalize lots
-                const lots = parseFloat(params.lots) || 0.01;
-                if (lots < 0.01) {
-                    return res.status(400).json({ error: 'Invalid lots value' });
-                }
-                command += ',lots=' + lots.toFixed(2);
-
-                // Add optional parameters
-                if (params.sl && !isNaN(params.sl)) command += ',sl=' + parseFloat(params.sl);
-                if (params.tp && !isNaN(params.tp)) command += ',tp=' + parseFloat(params.tp);
-            } else {
-                command += ',lots=0.01'; // Default lots
-            }
-        }
-        else if (action === 'sell') {
-            command += 'sell,' + symbol;
-            if (params) {
-                // Validate and normalize lots
-                const lots = parseFloat(params.lots) || 0.01;
-                if (lots < 0.01) {
-                    return res.status(400).json({ error: 'Invalid lots value' });
-                }
-                command += ',lots=' + lots.toFixed(2);
-
-                // Add optional parameters
-                if (params.sl && !isNaN(params.sl)) command += ',sl=' + parseFloat(params.sl);
-                if (params.tp && !isNaN(params.tp)) command += ',tp=' + parseFloat(params.tp);
-            } else {
-                command += ',lots=0.01'; // Default lots
-            }
-        }
-        else if (action === 'close') {
-            const symbolParts = symbol.split('-');
-            if (symbolParts.length > 1) {
-                // Close specific position type
-                const posType = symbolParts[0].toLowerCase();
-                const actualSymbol = symbolParts[1];
-                if (posType === 'buy') {
-                    command += 'closelong,' + actualSymbol;
-                } else if (posType === 'sell') {
-                    command += 'closeshort,' + actualSymbol;
-                } else {
-                    return res.status(400).json({ error: 'Invalid position type' });
-                }
-            } else {
-                // Close all positions for symbol
-                command += 'closeall,' + symbol;
-            }
-        }
-
-        console.log('Formatted command:', command);
-        
-        // Add command to pending queue
-        pendingCommands.push(command);
-        res.json({ status: 'command_queued', command });
-    } catch (error) {
-        console.error('Error formatting command:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-// WebSocket connection handler for web clients
+// WebSocket connection handler
 wss.on('connection', (ws) => {
-    console.log('New web client connected');
-    webClients.add(ws);
+    console.log('New client connected');
+    clients.add(ws);
 
-    // Send initial data if available
-    if (latestAccountData) {
+    // Send initial state
+    if (lastUpdate) {
         ws.send(JSON.stringify({
             type: 'update',
-            data: latestAccountData,
-            connected: true,
-            eaConnected,
-            timestamp: lastEAUpdate
+            connected: eaConnected,
+            data: lastUpdate
         }));
     }
 
-    // Send current status
-    ws.send(JSON.stringify({
-        type: 'status',
-        connected: true,
-        eaConnected,
-        timestamp: Date.now()
-    }));
+    // Handle incoming messages
+    ws.on('message', (message) => {
+        try {
+            const data = JSON.parse(message);
+            console.log('Received WebSocket message:', data);
+
+            if (data.type === 'command' && data.command.startsWith('GET_HISTORY')) {
+                const requestId = data.id || Date.now().toString();
+                console.log(`Processing history request ${requestId}:`, data.command);
+
+                // Store request details
+                historyRequests.set(requestId, {
+                    timestamp: Date.now(),
+                    ws,
+                    command: data.command
+                });
+
+                // Forward command to EA
+                pendingCommands.push({
+                    command: data.command,
+                    requestId
+                });
+
+                // Broadcast command to EA
+                broadcast(JSON.stringify({
+                    type: 'command',
+                    command: data.command,
+                    requestId
+                }));
+            }
+        } catch (error) {
+            console.error('Error processing WebSocket message:', error);
+            ws.send(JSON.stringify({
+                type: 'error',
+                error: 'Invalid message format'
+            }));
+        }
+    });
 
     ws.on('close', () => {
-        webClients.delete(ws);
-        console.log('Web client disconnected');
+        console.log('Client disconnected');
+        clients.delete(ws);
+        
+        // Clean up any pending requests from this client
+        for (const [requestId, request] of historyRequests.entries()) {
+            if (request.ws === ws) {
+                historyRequests.delete(requestId);
+            }
+        }
     });
 });
 
-// Check EA connection status
-setInterval(() => {
-    const now = Date.now();
-    const wasConnected = eaConnected;
-    
-    if (now - lastEAUpdate > 10000) {
-        eaConnected = false;
-        
-        if (wasConnected) {
-            broadcastToWeb({
-                type: 'status',
-                connected: true,
-                eaConnected: false,
-                timestamp: now
+// Trade history endpoint for EA
+app.post('/api/trade-history/ea', express.text(), (req, res) => {
+    try {
+        console.log('Received trade history from EA:', req.body);
+        const historyData = req.body;
+
+        // Process history data
+        if (historyData) {
+            const trades = historyData.split(';').filter(Boolean).map(trade => {
+                const [
+                    ticket, symbol, type, lots, openPrice, closePrice, 
+                    openTime, closeTime, profit, commission, swap
+                ] = trade.split(',');
+                return {
+                    ticket: parseInt(ticket),
+                    symbol,
+                    type: parseInt(type),
+                    lots: parseFloat(lots),
+                    openPrice: parseFloat(openPrice),
+                    closePrice: parseFloat(closePrice),
+                    openTime: new Date(openTime),
+                    closeTime: new Date(closeTime),
+                    profit: parseFloat(profit),
+                    commission: parseFloat(commission),
+                    swap: parseFloat(swap),
+                    total: parseFloat(profit) + parseFloat(commission) + parseFloat(swap)
+                };
             });
+
+            // Find the history request tracker
+            const requestId = [...historyRequests.keys()].find(key => {
+                const request = historyRequests.get(key);
+                return Date.now() - request.timestamp < 30000; // Within 30 seconds
+            });
+
+            if (requestId) {
+                const request = historyRequests.get(requestId);
+                historyRequests.delete(requestId);
+
+                // Broadcast the history to the requesting client
+                broadcast({
+                    type: 'tradeHistory',
+                    data: historyData,
+                    requestId: requestId
+                });
+            }
+
+            res.json({ success: true });
+        } else {
+            res.json({ success: false, error: 'No history data received' });
         }
+    } catch (error) {
+        console.error('Error processing trade history:', error);
+        res.json({ success: false, error: error.message });
     }
-}, 5000);
+});
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
