@@ -87,19 +87,24 @@ void ProcessCommand(string cmd)
 
     // Split command into parts, handling both comma and pipe delimiters
     string parts[];
-    if(StringFind(cmd, "|") != -1) {
-        StringSplit(cmd, '|', parts);
-    } else {
-        StringSplit(cmd, ',', parts);
-    }
-    
-    if(ArraySize(parts) < 1) return;
+    int numParts = StringSplit(cmd, '|', parts);
+    if (numParts < 1) return;
     
     string action = parts[0];
-    Print("Action to execute: ", action);
+    string requestId = "";
+    
+    // Extract request ID if present
+    if (StringFind(cmd, "requestId") >= 0) {
+        for (int i = 0; i < numParts; i++) {
+            if (StringFind(parts[i], "requestId") >= 0) {
+                requestId = parts[i+1];
+                break;
+            }
+        }
+    }
     
     if(action == "BUY" || action == "SELL") {
-        if(ArraySize(parts) < 5) {
+        if(numParts < 5) {
             Print("Invalid buy/sell command format");
             return;
         }
@@ -170,7 +175,7 @@ void ProcessCommand(string cmd)
         int type = -1;
         
         // Check if type is specified
-        if(ArraySize(parts) > 1) {
+        if(numParts > 1) {
             type = StringToInteger(parts[1]);
             Print("Closing all positions of type: ", type);
         } else {
@@ -200,13 +205,13 @@ void ProcessCommand(string cmd)
         Print("Close All operation completed. Success: ", success);
     }
     else if(action == "CLOSE") {
-        if(ArraySize(parts) < 2) return;
+        if(numParts < 2) return;
         
         int ticket = StringToInteger(parts[1]);
         double lots = OrderLots(); // Default to full position
         
         // If partial close is requested
-        if(ArraySize(parts) > 2) {
+        if(numParts > 2) {
             double percentage = StringToDouble(parts[2]);
             if(percentage > 0 && percentage < 100) {
                 lots = NormalizeDouble(OrderLots() * percentage / 100, 2);
@@ -228,7 +233,7 @@ void ProcessCommand(string cmd)
         }
     }
     else if(action == "MODIFY") {
-        if(ArraySize(parts) < 4) return;
+        if(numParts < 4) return;
         
         int ticket = StringToInteger(parts[1]);
         double sl = StringToDouble(parts[2]);
@@ -244,13 +249,13 @@ void ProcessCommand(string cmd)
         }
     }
     else if(action == "BREAKEVEN") {
-        if(ArraySize(parts) < 2) return;
+        if(numParts < 2) return;
         
         int ticket = StringToInteger(parts[1]);
         double pips = 0;
         
         // Optional pips buffer
-        if(ArraySize(parts) > 2) {
+        if(numParts > 2) {
             pips = StringToDouble(parts[2]);
         }
         
@@ -277,73 +282,17 @@ void ProcessCommand(string cmd)
         }
     }
     else if(action == "GET_HISTORY") {
-        Print("Processing GET_HISTORY command");
-        if(ArraySize(parts) < 2) {
-            Print("Invalid history command format");
-            return;
+        string period = numParts > 1 ? parts[1] : "ALL";
+        string historyData = GetTradeHistory(period);
+        
+        // Append request ID to history data if present
+        if (StringLen(requestId) > 0) {
+            historyData = StringConcatenate("HISTORY|REQUEST_ID|", requestId, "|", historyData);
+        } else {
+            historyData = StringConcatenate("HISTORY|", historyData);
         }
         
-        string period = parts[1];
-        string startDate = "";
-        string endDate = "";
-        
-        if(period == "custom" && ArraySize(parts) >= 4) {
-            startDate = parts[2];
-            endDate = parts[3];
-        }
-        
-        Print("Getting trade history for period: ", period);
-        if(period == "custom") {
-            Print("Custom period - Start: ", startDate, " End: ", endDate);
-        }
-        
-        string history = GetTradeHistory(period, startDate, endDate);
-        Print("Retrieved history: ", history);
-        
-        if(StringLen(history) == 0) {
-            Print("No trade history found for the period");
-            return;
-        }
-        
-        // Send history data
-        string historyData = "HISTORY|" + history;
-        Print("Sending history data: ", historyData);
-        
-        // Send history data using WebRequest
-        char post[];
-        StringToCharArray(historyData, post);
-        
-        string headers = "Content-Type: text/plain\r\n";
-        if(StringLen(ApiKey) > 0) {
-            headers += "X-API-Key: " + ApiKey + "\r\n";
-        }
-        
-        char result[];
-        string result_headers;
-        
-        ResetLastError();
-        int res = WebRequest(
-            "POST",                              // Method
-            ServerURL + "/api/mt4/update",       // URL
-            headers,                             // Headers
-            5000,                               // Timeout
-            post,                               // Data
-            result,                             // Result
-            result_headers                      // Response headers
-        );
-        
-        if(res == -1) {
-            int error = GetLastError();
-            Print("Error sending history - Error code:", error);
-            if(error == 4060) {
-                Print("Make sure WebRequest is allowed in Tools -> Options -> Expert Advisors");
-            }
-            return;
-        }
-        
-        string response = CharArrayToString(result);
-        Print("Server response: ", response);
-        Print("History sent successfully");
+        SendToServer(historyData);
     }
 }
 
@@ -470,6 +419,46 @@ string GetJsonValue(string json, string key)
 void SendUpdate()
 {
     string data = CreateUpdateString();
+    Print("Sending data: ", data);
+    
+    string headers = "Content-Type: text/plain\r\n";
+    if(StringLen(ApiKey) > 0) {
+        headers += "X-API-Key: " + ApiKey + "\r\n";
+    }
+    
+    char post[];
+    StringToCharArray(data, post);
+    
+    char result[];
+    string resultHeaders;
+    
+    int res = WebRequest(
+        "POST",
+        ServerURL + "/api/mt4/update",
+        headers,
+        5000,
+        post,
+        result,
+        resultHeaders
+    );
+    
+    if(res == -1) {
+        lastError = "Update failed: " + GetLastError();
+        isConnected = false;
+    } else {
+        string response = CharArrayToString(result);
+        Print("Server response: ", response);
+        ProcessServerResponse(response);
+        isConnected = true;
+        lastError = "";
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Send data to server                                               |
+//+------------------------------------------------------------------+
+void SendToServer(string data)
+{
     Print("Sending data: ", data);
     
     string headers = "Content-Type: text/plain\r\n";

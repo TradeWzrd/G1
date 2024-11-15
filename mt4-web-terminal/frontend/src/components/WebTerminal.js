@@ -268,8 +268,10 @@ const WebTerminal = () => {
         setError('');
         
         try {
+            const requestId = Date.now().toString();
             const command = {
                 type: 'command',
+                id: requestId,
                 command: customRange
                     ? `GET_HISTORY|custom|${customRange.startDate}|${customRange.endDate}`
                     : `GET_HISTORY|${period}`

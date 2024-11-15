@@ -13,6 +13,26 @@ const wss = new WebSocket.Server({ server });
 const clients = new Set();
 let pendingCommands = []; 
 const historyRequests = new Map();
+const HISTORY_REQUEST_TIMEOUT = 30000; // 30 seconds
+
+// Clear timed out history requests
+setInterval(() => {
+    const now = Date.now();
+    for (const [requestId, request] of historyRequests.entries()) {
+        if (now - request.timestamp > HISTORY_REQUEST_TIMEOUT) {
+            console.log(`History request ${requestId} timed out`);
+            if (request.ws && request.ws.readyState === WebSocket.OPEN) {
+                request.ws.send(JSON.stringify({
+                    type: 'history_response',
+                    status: 'error',
+                    error: 'Request timed out',
+                    requestId
+                }));
+            }
+            historyRequests.delete(requestId);
+        }
+    }
+}, 10000);
 
 // Store trade history
 let tradeHistory = [];
@@ -89,8 +109,17 @@ app.post('/api/mt4/update', express.text(), (req, res) => {
             const historyData = req.body.substring(8); // Remove 'HISTORY|'
             console.log('Processing history data:', historyData);
 
+            // Extract request ID if present
+            let requestId = null;
+            let historyContent = historyData;
+            if (historyData.includes('REQUEST_ID|')) {
+                const parts = historyData.split('REQUEST_ID|');
+                requestId = parts[1].split('|')[0];
+                historyContent = parts[1].split('|')[1];
+            }
+
             // Parse history data
-            const trades = historyData.split(';').filter(Boolean).map(trade => {
+            const trades = historyContent.split(';').filter(Boolean).map(trade => {
                 const [
                     ticket, symbol, type, lots, openPrice, closePrice, 
                     openTime, closeTime, profit, commission, swap
@@ -102,38 +131,39 @@ app.post('/api/mt4/update', express.text(), (req, res) => {
                     lots: parseFloat(lots),
                     openPrice: parseFloat(openPrice),
                     closePrice: parseFloat(closePrice),
-                    openTime,
-                    closeTime,
+                    openTime: parseInt(openTime),
+                    closeTime: parseInt(closeTime),
                     profit: parseFloat(profit),
                     commission: parseFloat(commission),
-                    swap: parseFloat(swap),
-                    total: parseFloat(profit) + parseFloat(commission) + parseFloat(swap)
+                    swap: parseFloat(swap)
                 };
             });
 
-            // Store the history
+            // Update trade history
             tradeHistory = trades;
+            lastUpdate = new Date().toISOString();
 
-            // Find the latest history request
-            const requestId = [...historyRequests.keys()].find(key => {
-                const request = historyRequests.get(key);
-                return Date.now() - request.timestamp < 30000; // Within 30 seconds
-            });
-
-            if (requestId) {
-                console.log('Found matching request:', requestId);
-                historyRequests.delete(requestId);
-
-                // Broadcast history data to clients
-                broadcast({
-                    type: 'tradeHistory',
+            // Find the client who requested this history
+            const request = requestId ? historyRequests.get(requestId) : null;
+            if (request && request.ws && request.ws.readyState === WebSocket.OPEN) {
+                // Send response directly to requesting client
+                request.ws.send(JSON.stringify({
+                    type: 'history_response',
+                    status: 'success',
+                    requestId,
                     data: trades
-                });
+                }));
+                historyRequests.delete(requestId);
             } else {
-                console.log('No matching history request found');
+                // Broadcast to all clients if no specific requester
+                broadcast(JSON.stringify({
+                    type: 'history_data',
+                    data: trades
+                }));
             }
 
-            return res.json({ success: true });
+            res.status(200).send('History processed');
+            return;
         }
 
         // Regular account update
@@ -464,61 +494,52 @@ wss.on('connection', (ws) => {
     // Handle incoming messages
     ws.on('message', (message) => {
         try {
-            const rawMessage = message.toString();
-            console.log('Raw WebSocket message received:', rawMessage);
-            
-            const data = JSON.parse(rawMessage);
-            console.log('Parsed WebSocket message:', data);
+            const data = JSON.parse(message);
+            console.log('Received WebSocket message:', data);
 
-            if (data.type === 'command' && data.command) {
-                const [cmd, ...params] = data.command.split('|');
-                console.log('Processing command:', cmd, 'with params:', params);
-                
-                if (cmd === 'GET_HISTORY') {
-                    console.log('Processing history request with params:', params);
-                    
-                    // Add command to pending queue for EA to process
-                    pendingCommands.push(data.command);
-                    console.log('Current pending commands:', pendingCommands);
-                    
-                    // Create a request tracker
-                    const requestId = Date.now().toString();
-                    historyRequests.set(requestId, ws);
-                    console.log('Created history request tracker:', requestId);
-                    
-                    // Set timeout for request
-                    setTimeout(() => {
-                        if (historyRequests.has(requestId)) {
-                            console.log('History request timed out:', requestId);
-                            historyRequests.delete(requestId);
-                            try {
-                                ws.send(JSON.stringify({
-                                    type: 'error',
-                                    error: 'History request timed out'
-                                }));
-                            } catch (error) {
-                                console.error('Error sending timeout message:', error);
-                            }
-                        }
-                    }, 30000);
-                }
+            if (data.type === 'command' && data.command.startsWith('GET_HISTORY')) {
+                const requestId = data.id || Date.now().toString();
+                console.log(`Processing history request ${requestId}:`, data.command);
+
+                // Store request details
+                historyRequests.set(requestId, {
+                    timestamp: Date.now(),
+                    ws,
+                    command: data.command
+                });
+
+                // Forward command to EA
+                pendingCommands.push({
+                    command: data.command,
+                    requestId
+                });
+
+                // Broadcast command to EA
+                broadcast(JSON.stringify({
+                    type: 'command',
+                    command: data.command,
+                    requestId
+                }));
             }
         } catch (error) {
             console.error('Error processing WebSocket message:', error);
-            try {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    error: 'Failed to process command: ' + error.message
-                }));
-            } catch (sendError) {
-                console.error('Error sending error message:', sendError);
-            }
+            ws.send(JSON.stringify({
+                type: 'error',
+                error: 'Invalid message format'
+            }));
         }
     });
 
     ws.on('close', () => {
         console.log('Client disconnected');
         clients.delete(ws);
+        
+        // Clean up any pending requests from this client
+        for (const [requestId, request] of historyRequests.entries()) {
+            if (request.ws === ws) {
+                historyRequests.delete(requestId);
+            }
+        }
     });
 });
 
