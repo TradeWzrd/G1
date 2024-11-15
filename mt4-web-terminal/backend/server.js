@@ -154,20 +154,39 @@ app.post('/api/trade', (req, res) => {
     }
 
     // Format command string
-    let command = action;  // Start with action
-    if (action === 'close') {
-        command += ',' + symbol;  // For close, symbol is the ticket number
-    } else {
-        command += ',' + symbol;  // For buy/sell, symbol is the trading symbol
+    let command = '';
+    
+    if (action === 'buy') {
+        command = 'buy,' + symbol;
         if (params) {
-            // Add lots
-            if (params.lots) command += ',lots=' + params.lots;
+            // Add risk (required)
+            command += ',risk=' + (params.lots || 0.01);
             // Add stop loss if provided and not zero
             if (params.sl && params.sl !== 0) command += ',sl=' + params.sl;
             // Add take profit if provided and not zero
             if (params.tp && params.tp !== 0) command += ',tp=' + params.tp;
             // Add comment if provided
             if (params.comment) command += ',comment=' + params.comment;
+        }
+    }
+    else if (action === 'sell') {
+        command = 'sell,' + symbol;
+        if (params) {
+            // Add risk (required)
+            command += ',risk=' + (params.lots || 0.01);
+            // Add stop loss if provided and not zero
+            if (params.sl && params.sl !== 0) command += ',sl=' + params.sl;
+            // Add take profit if provided and not zero
+            if (params.tp && params.tp !== 0) command += ',tp=' + params.tp;
+            // Add comment if provided
+            if (params.comment) command += ',comment=' + params.comment;
+        }
+    }
+    else if (action === 'close') {
+        if (symbol.includes('buy') || symbol.includes('sell')) {
+            command = 'close' + symbol + ',' + symbol.split('-')[1];
+        } else {
+            command = 'closeall,' + symbol;
         }
     }
 

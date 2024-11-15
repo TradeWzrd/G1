@@ -8,7 +8,7 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
     const [loading, setLoading] = useState(false);
     const [newOrder, setNewOrder] = useState({
         symbol: '',
-        lots: '0.01',
+        risk: '0.01',  
         stopLoss: '',
         takeProfit: '',
         comment: ''
@@ -27,13 +27,13 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
     }, [propPositions]);
 
     // Send trade command
-    const sendTradeCommand = async (action, ticket = null) => {
+    const sendTradeCommand = async (action, position = null) => {
         if (!connected || !eaConnected) {
             toast.error('Not connected to server or MT4');
             return;
         }
 
-        if (!ticket && !newOrder.symbol) {
+        if (!position && !newOrder.symbol) {
             toast.error('Symbol is required');
             return;
         }
@@ -42,11 +42,11 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
         try {
             const command = {
                 action,
-                // For close action, use ticket as symbol
-                symbol: action === 'close' ? ticket : newOrder.symbol,
+                // For close action, use position info
+                symbol: position ? (action + '-' + position.symbol) : newOrder.symbol,
                 // Only include params for buy/sell actions
-                params: action === 'close' ? undefined : {
-                    lots: parseFloat(newOrder.lots) || 0.01,
+                params: position ? undefined : {
+                    risk: parseFloat(newOrder.risk) || 0.01,
                     sl: parseFloat(newOrder.stopLoss) || 0,
                     tp: parseFloat(newOrder.takeProfit) || 0,
                     comment: newOrder.comment || 'Web Terminal'
@@ -74,10 +74,10 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
             toast.success(`${action.toUpperCase()} order sent successfully`);
             
             // Clear form after successful order
-            if (!ticket) {
+            if (!position) {
                 setNewOrder({
                     symbol: '',
-                    lots: '0.01',
+                    risk: '0.01',
                     stopLoss: '',
                     takeProfit: '',
                     comment: ''
@@ -157,13 +157,13 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-300">Lots</label>
+                            <label className="block text-sm font-medium text-gray-300">Risk</label>
                             <input
                                 type="number"
-                                name="lots"
+                                name="risk"
                                 step="0.01"
                                 min="0.01"
-                                value={newOrder.lots}
+                                value={newOrder.risk}
                                 onChange={handleInputChange}
                                 className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
                             />
@@ -253,7 +253,7 @@ const WebTerminal = ({ connected, eaConnected, accountData: propAccountData, pos
                                             </td>
                                             <td className="py-2">
                                                 <button
-                                                    onClick={() => sendTradeCommand('close', position.ticket)}
+                                                    onClick={() => sendTradeCommand('close', position)}
                                                     disabled={!connected || !eaConnected || loading}
                                                     className="text-red-400 hover:text-red-300"
                                                 >

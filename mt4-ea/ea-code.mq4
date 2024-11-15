@@ -253,17 +253,16 @@ void ProcessCommand(string command) {
     string parts[];
     StringSplit(command, ',', parts);
     
-    if(ArraySize(parts) < 2) {
+    if(ArraySize(parts) < 3) {
         Print("Invalid command format");
         return;
     }
     
-    string action = parts[0];
+    string action = StringLower(parts[0]);  // Convert to lowercase
     string symbol = parts[1];
-    
-    double lots = 0.01;     // Default lots
-    double sl = 0;          // Default stop loss
-    double tp = 0;          // Default take profit
+    double risk = 0.01;  // Default risk
+    double sl = 0;       // Default stop loss
+    double tp = 0;       // Default take profit
     string comment = "Web Terminal";
     
     // Parse parameters
@@ -272,21 +271,36 @@ void ProcessCommand(string command) {
         StringSplit(parts[i], '=', paramParts);
         if(ArraySize(paramParts) != 2) continue;
         
-        string paramName = StringTrimRight(StringTrimLeft(paramParts[0]));
+        string paramName = StringLower(StringTrimRight(StringTrimLeft(paramParts[0])));
         string paramValue = StringTrimRight(StringTrimLeft(paramParts[1]));
         
         Print("Param: ", paramName, "=", paramValue);  // Debug print
         
-        if(paramName == "lots") lots = StringToDouble(paramValue);
+        if(paramName == "risk") risk = StringToDouble(paramValue);
         else if(paramName == "sl") sl = StringToDouble(paramValue);
         else if(paramName == "tp") tp = StringToDouble(paramValue);
         else if(paramName == "comment") comment = paramValue;
     }
     
-    Print("Executing command - Action: ", action, ", Symbol: ", symbol, ", Lots: ", lots, ", SL: ", sl, ", TP: ", tp);
+    Print("Executing command - Action: ", action, ", Symbol: ", symbol, ", Risk: ", risk, ", SL: ", sl, ", TP: ", tp);
+    
+    // Calculate lots based on risk
+    double accountBalance = AccountBalance();
+    double lotStep = MarketInfo(symbol, MODE_LOTSTEP);
+    double minLot = MarketInfo(symbol, MODE_MINLOT);
+    double maxLot = MarketInfo(symbol, MODE_MAXLOT);
+    double tickValue = MarketInfo(symbol, MODE_TICKVALUE);
+    double tickSize = MarketInfo(symbol, MODE_TICKSIZE);
+    
+    // Calculate lot size based on risk percentage
+    double riskAmount = accountBalance * risk / 100;
+    double lots = NormalizeDouble(riskAmount / (tickValue / tickSize), 2);
+    lots = MathMax(minLot, MathMin(maxLot, NormalizeDouble(lots / lotStep, 0) * lotStep));
+    
+    Print("Calculated lots: ", lots);
     
     // Execute command
-    if(action == "buy") {
+    if(action == "buy" || action == "long" || action == "bull" || action == "bullish") {
         double ask = MarketInfo(symbol, MODE_ASK);
         Print("Opening BUY order at ", ask);
         int ticket = OrderSend(symbol, OP_BUY, lots, ask, 3, sl, tp, comment, MAGICMA);
@@ -296,7 +310,7 @@ void ProcessCommand(string command) {
         }
         else Print("BUY order opened: Ticket=", ticket);
     }
-    else if(action == "sell") {
+    else if(action == "sell" || action == "short" || action == "bear" || action == "bearish") {
         double bid = MarketInfo(symbol, MODE_BID);
         Print("Opening SELL order at ", bid);
         int ticket = OrderSend(symbol, OP_SELL, lots, bid, 3, sl, tp, comment, MAGICMA);
@@ -306,26 +320,23 @@ void ProcessCommand(string command) {
         }
         else Print("SELL order opened: Ticket=", ticket);
     }
-    else if(action == "close") {
-        int ticket = StringToInteger(symbol);
-        Print("Closing order: Ticket=", ticket);
-        if(OrderSelect(ticket, SELECT_BY_TICKET)) {
-            if(OrderType() == OP_BUY) {
-                bool result = OrderClose(ticket, OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), 3);
-                if(!result) {
-                    int error = GetLastError();
-                    Print("Error closing BUY order: ", error, " - ", GetErrorText(error));
+    else if(action == "closelong" || action == "closeshort" || action == "closeall") {
+        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+            if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
+                if(OrderMagicNumber() == MAGICMA && (OrderSymbol() == symbol || action == "closeall")) {
+                    if((action == "closelong" && OrderType() == OP_BUY) || 
+                       (action == "closeshort" && OrderType() == OP_SELL) ||
+                       action == "closeall") {
+                        bool result = OrderClose(OrderTicket(), OrderLots(), 
+                            OrderType() == OP_BUY ? MarketInfo(OrderSymbol(), MODE_BID) : MarketInfo(OrderSymbol(), MODE_ASK), 
+                            3);
+                        if(!result) {
+                            int error = GetLastError();
+                            Print("Error closing order: ", error, " - ", GetErrorText(error));
+                        }
+                    }
                 }
             }
-            else if(OrderType() == OP_SELL) {
-                bool result = OrderClose(ticket, OrderLots(), MarketInfo(OrderSymbol(), MODE_ASK), 3);
-                if(!result) {
-                    int error = GetLastError();
-                    Print("Error closing SELL order: ", error, " - ", GetErrorText(error));
-                }
-            }
-        } else {
-            Print("Could not select order: ", ticket);
         }
     }
     
