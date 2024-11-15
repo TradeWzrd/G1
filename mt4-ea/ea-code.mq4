@@ -26,7 +26,11 @@ bool SendToServer(string data) {
     string resultHeaders;
     string cookie=NULL;
     
-    StringToCharArray(data, post);
+    // Add quotes to make it a proper string
+    string jsonData = "\"" + StringReplace(data, "\"", "\\\"") + "\"";
+    StringToCharArray(jsonData, post);
+    
+    Print("Sending data: ", jsonData);  // Debug print
     
     ResetLastError();
     int res = WebRequest(
@@ -50,49 +54,6 @@ bool SendToServer(string data) {
         isConnected = true;
         lastUpdateTime = TimeLocal();
         return true;
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Check for trade commands                                           |
-//+------------------------------------------------------------------+
-void CheckTradeCommands() {
-    string url = ServerURL + "/api/mt4/commands";
-    char result[];
-    string resultHeaders;
-    char empty[];
-    string cookie=NULL;
-    
-    ArrayResize(empty, 1);
-    empty[0] = 0;
-    
-    ResetLastError();
-    int res = WebRequest(
-        "GET",                 // Method
-        url,                   // URL
-        cookie,                // Cookie
-        NULL,                  // Referer
-        5000,                  // Timeout
-        empty,                 // Data
-        ArraySize(empty),      // Data size
-        result,                // Result
-        resultHeaders          // Response headers
-    );
-    
-    if(res != -1) {
-        string commands = CharArrayToString(result);
-        // Skip empty responses
-        if(StringLen(commands) > 0 && StringFind(commands, "<!DOCTYPE") == -1) {
-            string trimmed = StringTrimRight(StringTrimLeft(commands));
-            // Skip empty JSON responses
-            if(trimmed != "\"\"" && trimmed != "") {
-                // Remove quotes if present
-                if(StringGetChar(trimmed, 0) == 34) { // 34 is ASCII for "
-                    trimmed = StringSubstr(trimmed, 1, StringLen(trimmed) - 2);
-                }
-                ProcessCommand(trimmed);
-            }
-        }
     }
 }
 
@@ -126,7 +87,53 @@ string CreateUpdateString() {
         );
     }
     
+    Print("Created update string: ", accountInfo + positions);  // Debug print
     return accountInfo + positions;
+}
+
+//+------------------------------------------------------------------+
+//| Check for trade commands                                           |
+//+------------------------------------------------------------------+
+void CheckTradeCommands() {
+    string url = ServerURL + "/api/mt4/commands";
+    char result[];
+    string resultHeaders;
+    char empty[];
+    string cookie=NULL;
+    
+    ArrayResize(empty, 1);
+    empty[0] = 0;
+    
+    ResetLastError();
+    int res = WebRequest(
+        "GET",                 // Method
+        url,                   // URL
+        cookie,                // Cookie
+        NULL,                  // Referer
+        5000,                  // Timeout
+        empty,                 // Data
+        ArraySize(empty),      // Data size
+        result,                // Result
+        resultHeaders          // Response headers
+    );
+    
+    if(res != -1) {
+        string commands = CharArrayToString(result);
+        Print("Received commands: ", commands);  // Debug print
+        
+        // Skip empty responses
+        if(StringLen(commands) > 0 && StringFind(commands, "<!DOCTYPE") == -1) {
+            string trimmed = StringTrimRight(StringTrimLeft(commands));
+            // Skip empty JSON responses
+            if(trimmed != "\"\"" && trimmed != "") {
+                // Remove quotes if present
+                if(StringGetChar(trimmed, 0) == 34) { // 34 is ASCII for "
+                    trimmed = StringSubstr(trimmed, 1, StringLen(trimmed) - 2);
+                }
+                ProcessCommand(trimmed);
+            }
+        }
+    }
 }
 
 //+------------------------------------------------------------------+

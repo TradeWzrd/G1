@@ -17,7 +17,7 @@ let lastEAUpdate = Date.now();
 let pendingCommands = [];
 
 // Middleware
-app.use(express.text());
+app.use(express.text({ type: '*/*' }));  // Handle all content types as text
 app.use(express.json());
 app.use(cors());
 app.use(morgan('dev'));
@@ -25,13 +25,22 @@ app.use(morgan('dev'));
 // Parse MT4 update data
 function parseData(dataString) {
     try {
-        if (typeof dataString !== 'string') {
+        // If the data is wrapped in quotes, remove them
+        if (typeof dataString === 'string') {
+            dataString = dataString.trim();
+            if (dataString.startsWith('"') && dataString.endsWith('"')) {
+                dataString = dataString.slice(1, -1);
+            }
+        } else {
             console.error('Invalid data type:', typeof dataString);
             return null;
         }
 
         const parts = dataString.split('|');
-        if (parts.length < 2) return null;
+        if (parts.length < 2) {
+            console.error('Invalid data format: not enough parts');
+            return null;
+        }
 
         const data = {
             account: {},
@@ -57,7 +66,7 @@ function parseData(dataString) {
                 return {
                     ticket: parseInt(ticket),
                     symbol,
-                    type,
+                    type: parseInt(type),
                     lots: parseFloat(lots),
                     openPrice: parseFloat(openPrice),
                     sl: parseFloat(sl),
@@ -87,10 +96,9 @@ function broadcastToWeb(data) {
 
 // MT4 EA update endpoint
 app.post('/api/mt4/update', (req, res) => {
-    const rawData = req.body;
-    console.log('Received MT4 update:', rawData);
-
-    const data = parseData(rawData);
+    console.log('Received MT4 update:', req.body);
+    
+    const data = parseData(req.body);
     if (!data) {
         return res.status(400).send('Invalid data format');
     }
