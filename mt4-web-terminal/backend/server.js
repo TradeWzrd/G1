@@ -89,6 +89,31 @@ app.post('/api/mt4/update', express.text(), (req, res) => {
             const historyData = req.body.substring(8); // Remove 'HISTORY|'
             console.log('Processing history data:', historyData);
 
+            // Parse history data
+            const trades = historyData.split(';').filter(Boolean).map(trade => {
+                const [
+                    ticket, symbol, type, lots, openPrice, closePrice, 
+                    openTime, closeTime, profit, commission, swap
+                ] = trade.split(',');
+                return {
+                    ticket: parseInt(ticket),
+                    symbol,
+                    type: parseInt(type),
+                    lots: parseFloat(lots),
+                    openPrice: parseFloat(openPrice),
+                    closePrice: parseFloat(closePrice),
+                    openTime,
+                    closeTime,
+                    profit: parseFloat(profit),
+                    commission: parseFloat(commission),
+                    swap: parseFloat(swap),
+                    total: parseFloat(profit) + parseFloat(commission) + parseFloat(swap)
+                };
+            });
+
+            // Store the history
+            tradeHistory = trades;
+
             // Find the latest history request
             const requestId = [...historyRequests.keys()].find(key => {
                 const request = historyRequests.get(key);
@@ -102,7 +127,7 @@ app.post('/api/mt4/update', express.text(), (req, res) => {
                 // Broadcast history data to clients
                 broadcast({
                     type: 'tradeHistory',
-                    data: historyData
+                    data: trades
                 });
             } else {
                 console.log('No matching history request found');

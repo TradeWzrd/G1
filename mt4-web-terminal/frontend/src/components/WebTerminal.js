@@ -114,32 +114,10 @@ const WebTerminal = () => {
                         }
                         setLastUpdate(new Date());
                     } else if (data.type === 'tradeHistory') {
+                        console.log('Received trade history:', data.data);
                         setHistoryLoading(false);
                         setHistoryError('');
-                        
-                        if (data.data) {
-                            const trades = data.data.split(';').filter(Boolean).map(trade => {
-                                const [
-                                    ticket, symbol, type, lots, openPrice, closePrice, 
-                                    openTime, closeTime, profit, commission, swap
-                                ] = trade.split(',');
-                                return {
-                                    ticket: parseInt(ticket),
-                                    symbol,
-                                    type: parseInt(type),
-                                    lots: parseFloat(lots),
-                                    openPrice: parseFloat(openPrice),
-                                    closePrice: parseFloat(closePrice),
-                                    openTime,
-                                    closeTime,
-                                    profit: parseFloat(profit),
-                                    commission: parseFloat(commission),
-                                    swap: parseFloat(swap),
-                                    total: parseFloat(profit) + parseFloat(commission) + parseFloat(swap)
-                                };
-                            });
-                            setTradeHistory(trades);
-                        }
+                        setTradeHistory(data.data);
                     } else if (data.type === 'error') {
                         console.error('Server error:', data.error);
                         setError(data.error);

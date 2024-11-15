@@ -85,9 +85,13 @@ void ProcessCommand(string cmd)
 {
     Print("Processing single command: ", cmd);
 
-    // Split command into parts
+    // Split command into parts, handling both comma and pipe delimiters
     string parts[];
-    StringSplit(cmd, ',', parts);
+    if(StringFind(cmd, "|") != -1) {
+        StringSplit(cmd, '|', parts);
+    } else {
+        StringSplit(cmd, ',', parts);
+    }
     
     if(ArraySize(parts) < 1) return;
     
@@ -301,10 +305,11 @@ void ProcessCommand(string cmd)
             return;
         }
         
-        // Send history data in the same format as account updates
+        // Send history data
         string historyData = "HISTORY|" + history;
         Print("Sending history data: ", historyData);
         
+        // Send history data using WebRequest
         char post[];
         StringToCharArray(historyData, post);
         
@@ -316,19 +321,23 @@ void ProcessCommand(string cmd)
         char result[];
         string result_headers;
         
+        ResetLastError();
         int res = WebRequest(
-            "POST",
-            ServerURL + "/api/mt4/update",
-            headers,
-            5000,
-            post,
-            result,
-            result_headers
+            "POST",                              // Method
+            ServerURL + "/api/mt4/update",       // URL
+            headers,                             // Headers
+            5000,                               // Timeout
+            post,                               // Data
+            result,                             // Result
+            result_headers                      // Response headers
         );
         
         if(res == -1) {
             int error = GetLastError();
             Print("Error sending history - Error code:", error);
+            if(error == 4060) {
+                Print("Make sure WebRequest is allowed in Tools -> Options -> Expert Advisors");
+            }
             return;
         }
         
@@ -385,33 +394,39 @@ string GetTradeHistory(string period, string startDate="", string endDate="")
     Print("Searching for trades between ", TimeToStr(startTime), " and ", TimeToStr(endTime));
     
     for(int i = OrdersHistoryTotal() - 1; i >= 0; i--) {
-        if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) {
-            datetime closeTime = OrderCloseTime();
-            if(closeTime >= startTime && closeTime <= endTime) {
-                if(!firstTrade) history += ";";
-                
-                // Format: ticket,symbol,type,lots,openPrice,closePrice,openTime,closeTime,profit,commission,swap
-                history += OrderTicket() + ",";
-                history += OrderSymbol() + ",";
-                history += OrderType() + ",";
-                history += DoubleToStr(OrderLots(), 2) + ",";
-                history += DoubleToStr(OrderOpenPrice(), 5) + ",";
-                history += DoubleToStr(OrderClosePrice(), 5) + ",";
-                history += TimeToStr(OrderOpenTime(), TIME_DATE|TIME_SECONDS) + ",";
-                history += TimeToStr(OrderCloseTime(), TIME_DATE|TIME_SECONDS) + ",";
-                history += DoubleToStr(OrderProfit(), 2) + ",";
-                history += DoubleToStr(OrderCommission(), 2) + ",";
-                history += DoubleToStr(OrderSwap(), 2);
-                
-                firstTrade = false;
-                tradesFound++;
-            }
+        if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) {
+            Print("Error selecting order ", i, " - Error:", GetLastError());
+            continue;
+        }
+        
+        datetime closeTime = OrderCloseTime();
+        if(closeTime >= startTime && closeTime <= endTime) {
+            if(!firstTrade) history += ";";
+            
+            // Format: ticket,symbol,type,lots,openPrice,closePrice,openTime,closeTime,profit,commission,swap
+            history += OrderTicket() + ",";
+            history += OrderSymbol() + ",";
+            history += OrderType() + ",";
+            history += DoubleToStr(OrderLots(), 2) + ",";
+            history += DoubleToStr(OrderOpenPrice(), 5) + ",";
+            history += DoubleToStr(OrderClosePrice(), 5) + ",";
+            history += TimeToStr(OrderOpenTime(), TIME_DATE|TIME_SECONDS) + ",";
+            history += TimeToStr(OrderCloseTime(), TIME_DATE|TIME_SECONDS) + ",";
+            history += DoubleToStr(OrderProfit(), 2) + ",";
+            history += DoubleToStr(OrderCommission(), 2) + ",";
+            history += DoubleToStr(OrderSwap(), 2);
+            
+            firstTrade = false;
+            tradesFound++;
+            Print("Added trade #", OrderTicket(), " to history");
         }
     }
     
     Print("Found ", tradesFound, " trades in the specified period");
     if(tradesFound == 0) {
         Print("No trades found in the period");
+    } else {
+        Print("History string length: ", StringLen(history));
     }
     
     return history;
