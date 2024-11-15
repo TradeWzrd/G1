@@ -25,20 +25,23 @@ app.use(morgan('dev'));
 // Parse MT4 update data
 function parseData(dataString) {
     try {
-        // If the data is wrapped in quotes, remove them
-        if (typeof dataString === 'string') {
-            dataString = dataString.trim();
-            if (dataString.startsWith('"') && dataString.endsWith('"')) {
-                dataString = dataString.slice(1, -1);
-            }
-        } else {
+        if (typeof dataString !== 'string') {
             console.error('Invalid data type:', typeof dataString);
             return null;
         }
 
+        // Remove any quotes and trim whitespace
+        dataString = dataString.trim();
+        if (dataString.startsWith('"') && dataString.endsWith('"')) {
+            dataString = dataString.slice(1, -1);
+        }
+
+        console.log('Parsing data string:', dataString);
+
         const parts = dataString.split('|');
         if (parts.length < 2) {
             console.error('Invalid data format: not enough parts');
+            console.error('Parts:', parts);
             return null;
         }
 
@@ -49,13 +52,17 @@ function parseData(dataString) {
 
         // Parse account data
         if (parts[0] === 'ACCOUNT' && parts[1]) {
-            const [balance, equity, margin, freeMargin] = parts[1].split(';');
+            const [balance, equity, margin, freeMargin] = parts[1].split(';').map(Number);
             data.account = {
-                balance: parseFloat(balance),
-                equity: parseFloat(equity),
-                margin: parseFloat(margin),
-                freeMargin: parseFloat(freeMargin)
+                balance,
+                equity,
+                margin,
+                freeMargin
             };
+        } else {
+            console.error('Invalid account data format');
+            console.error('First parts:', parts[0], parts[1]);
+            return null;
         }
 
         // Parse positions
@@ -78,6 +85,7 @@ function parseData(dataString) {
             });
         }
 
+        console.log('Parsed data:', data);
         return data;
     } catch (error) {
         console.error('Error parsing data:', error);
@@ -96,10 +104,12 @@ function broadcastToWeb(data) {
 
 // MT4 EA update endpoint
 app.post('/api/mt4/update', (req, res) => {
-    console.log('Received MT4 update:', req.body);
+    const rawData = req.body;
+    console.log('Received raw MT4 update:', rawData);
     
-    const data = parseData(req.body);
+    const data = parseData(rawData);
     if (!data) {
+        console.error('Failed to parse data');
         return res.status(400).send('Invalid data format');
     }
 

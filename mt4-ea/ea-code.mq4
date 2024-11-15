@@ -26,11 +26,14 @@ bool SendToServer(string data) {
     string resultHeaders;
     string cookie=NULL;
     
-    // Add quotes to make it a proper string
-    string jsonData = "\"" + StringReplace(data, "\"", "\\\"") + "\"";
-    StringToCharArray(jsonData, post);
+    // Convert string to char array for sending
+    int len = StringLen(data);
+    ArrayResize(post, len);
+    for(int i = 0; i < len; i++) {
+        post[i] = StringGetChar(data, i);
+    }
     
-    Print("Sending data: ", jsonData);  // Debug print
+    Print("Sending data: ", data);  // Debug print
     
     ResetLastError();
     int res = WebRequest(
@@ -87,8 +90,9 @@ string CreateUpdateString() {
         );
     }
     
-    Print("Created update string: ", accountInfo + positions);  // Debug print
-    return accountInfo + positions;
+    string updateString = accountInfo + positions;
+    Print("Created update string: ", updateString);  // Debug print
+    return updateString;
 }
 
 //+------------------------------------------------------------------+
