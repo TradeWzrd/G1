@@ -484,6 +484,40 @@ app.get('/api/trade/pending', (req, res) => {
     res.json({ commands: pendingCommands });
 });
 
+// Handle trade commands
+app.post('/trade', (req, res) => {
+    const { action, symbol, params } = req.body;
+    
+    if (!action || !symbol) {
+        return res.status(400).json({ error: 'Missing required parameters' });
+    }
+
+    // Build command in PineConnector format
+    let command = [action, symbol];
+    
+    // Add additional parameters if present
+    if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+            command.push(`${key}=${value}`);
+        });
+    }
+
+    // Join with commas to create final command
+    const finalCommand = command.join(',');
+    
+    // Send command to all connected clients
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+                type: 'command',
+                data: finalCommand
+            }));
+        }
+    });
+
+    res.json({ success: true, command: finalCommand });
+});
+
 // Broadcast function
 function broadcast(data) {
     const message = JSON.stringify(data);
@@ -557,6 +591,35 @@ wss.on('connection', (ws) => {
                 historyRequests.delete(requestId);
             }
         }
+    });
+});
+
+// WebSocket message handler
+wss.on('connection', (ws) => {
+    console.log('Client connected');
+    
+    ws.on('message', (message) => {
+        try {
+            const data = JSON.parse(message);
+            
+            if (data.type === 'history_data') {
+                // Broadcast history data to all connected clients
+                wss.clients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN) {
+                        client.send(JSON.stringify({
+                            type: 'history_response',
+                            data: data.data
+                        }));
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Error processing message:', error);
+        }
+    });
+
+    ws.on('close', () => {
+        console.log('Client disconnected');
     });
 });
 

@@ -1,0 +1,923 @@
+v3 Portal →
+Getting Started
+
+PineConnector Docs /
+
+Syntax
+
+EA Setup
+Alerts Setup
+Configure EA
+Syntax
+
+O N T H I S PA G E
+
+Syntax
+
+Syntax
+
+Syntax refers to the set of rules that dictate the proper construction of an alert
+message.
+
+Guidelines
+Components
+
+Syntax Guide
+Syntax commands, rules, and
+
+Sample Combined Syntax
+
+examples
+
+Here are some PineConnector-compliant syntax examples:
+
+Multi-Strategy
+Run multiple strategies with
+one license
+
+Scripts Library
+
+60123456789,buy,AUDUSD,risk=0.1
+60123456789,sell,GBPJPY,sl=50,risk=1
+60123456789,closelong,GBPUSD
+To see more Sample Combined Syntax and its interpretations, click here.
+
+Structure
+Market Orders
+buy
+sell
+risk=
+sl=
+tp=
+
+FAQ
+Resources
+
+Alert Message
+
+comment=
+
+Alert Message Guidelines
+
+eaoff
+
+To create PineConnector-compliant alert messages, please pay attention to the
+
+eaon
+
+following guidelines. Failure to adhere to the syntax may result in the EA rejecting
+
+closeall
+
+your signal.
+
+closealleaoff
+closelong
+
+Test Drive Before Going Live
+Before creating actual alerts for your strategy, we recommend sending
+manual or test alerts to ensure the following:
+1. The alert message configured on TradingView is valid, as per the Syntax
+Guide.
+
+closeshort
+closelongshort
+closelongbuy
+closeshortsell
+
+2. The selected EA Settings result in the intended behavior.
+To learn how to send manual or test alerts, click here.
+
+newsltplong
+newsltpshort
+closelongpct
+closeshortpct
+
+Checking for Successful Signals
+If you don't see signals appearing on your MetaTrader terminal, you can check
+the Signals Log in your members portal.
+
+closelongvol
+closeshortvol
+Pending Orders
+price=
+buystop
+buylimit
+
+Keep in mind that rejected signals will not appear in the log.
+
+sellstop
+selllimit
+cancellong
+
+Components
+There are four components in alert messages, namely:
+
+Component
+
+License ID
+
+Commands
+
+Echo
+Instances & Licenses
+
+Symbol
+
+Others
+
+This is a unique identifier found in the Licensing Dashboard.
+It is a long value that usually starts with a 6 or 7, such as 70123456789.
+These are actions like "buy," "sell," etc.
+Please note that commands do not have an equal (=) sign.
+This refers to the asset or instrument to be traded.
+These are additional components that use the equal (=) sign, such as
+"risk=".
+
+cancellongbuystop
+cancellongbuylimit
+cancelshortsellstop
+cancelshortselllimit
+newsltpbuystop
+newsltpbuylimit
+newsltpsellstop
+newsltpselllimit
+Breakeven
+betrigger=
+beoffset=
+
+Signal Authentication
+Symbol Mapping
+
+Remarks
+
+cancelshort
+
+Pip Trailing
+
+Structure
+
+trailtrig=
+
+1. The syntax must follow this order:
+LicenseID, Command, Symbol, Others
+
+2. Components must be separated by commas (,)
+3. Each alert can only have one License ID, Command, and Symbol.
+Acceptable PineConnector Syntax
+
+1. LicenseID,Command,Symbol,Others (without spacing between commas)
+2. LicenseID , Command , Symbol , Others (with spacing between commas)
+
+Unacceptable PineConnector Syntax
+
+1. Command,LicenseID,Symbol (incorrect order)
+2. LicenseID,Command,Command (multiple Commands)
+3. LicenseID,LicenseID,Command,Symbol (multiple LicenseIDs)
+
+Market Orders
+Commands and syntax for market orders such as buy and sell.
+
+Looking for Pending Order’s commands and syntax? Jump here.
+
+buy
+Place a buy order at the market.
+
+Valid Alternatives (case-insensitive)
+long
+bull
+bullish
+
+risk= is a required parameter
+
+LicenseID,buy,EURUSD,risk=0.01
+LicenseID,long,US30.Cash,risk=1
+LicenseID,bullish,GBPJPY,risk=1
+
+sell
+Place a sell order at the market.
+
+Valid Alternatives (case-insensitive)
+short
+bear
+bearish
+
+risk= is a required parameter
+
+traildist=
+
+LicenseID,sell,EURUSD,risk=0.01
+LicenseID,short,DAX30,risk=2
+LicenseID,bear,GBPJPY,risk=1
+
+risk=
+
+required parameter for all entry commands such as buy and buylimit
+
+Function depends on the “Volume Type” selected in the EA
+EA Options: Lots, Dollar Amount, Percentage of Balance (Lots) and Percentage of
+Balance (Loss).
+
+LicenseID,buy,EURUSD,risk=0.01
+LicenseID,sell,EURCAD,risk=2
+
+sl=
+Place stop-loss.
+Computation is based on the Target Type selected in the EA
+EA Options: Pips, Price and Percentage.
+
+LicenseID,buy,EURUSD,risk=1,sl=10.5
+
+tp=
+Place take-profit.
+Computation is based on the Target Type selected in the EA
+EA Options: Pips, Price and Percentage.
+
+LicenseID,buy,EURUSD,risk=1,tp=15
+
+comment=
+Add a string into the order’s comment section.
+Valid for entry commands only (buy, buylimit etc).
+
+For PineConnector v3, comments does not have to be enclosed within
+quotation.
+
+Please ensure comment used is within 20 characters.
+
+LicenseID,buy,EURUSD,risk=1,comment=Strategy 1
+LicenseID,buy,EURUSD,risk=1,comment=Strategy 2
+LicenseID,buy,EURUSD,risk=1,comment= 100 5/6
+LicenseID,buy,EURUSD,risk=1,comment= Set=20
+LicenseID,buy,EURUSD,risk=1,comment=12345678901234567890 (valid, within
+LicenseID,buy,EURUSD,risk=1,comment=123456789012345678901 (invalid, abo
+
+eaoff
+Halts the PineConnector EA.
+If the EA is halted, incoming signals will not be processed.
+
+LicenseID,eaoff,eaoff
+
+eaon
+Reactivates the PineConnector EA from halt.
+
+LicenseID,eaon,eaon
+
+closeall
+Close all positions and orders, regardless of symbol
+
+This syntax will only close positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+If you are looking to close positions only with the indicated symbol, use
+“closelong”, “closeshort” or “closelongshort” instead.
+
+LicenseID,closeall,EURUSD
+
+Safety Measure
+The command will only work if the right symbol is indicated.
+Indicate the symbol where the PineConnector EA is running on. If the
+PineConnector EA is running on GBPJPY.a, indicate “GBPJPY.a” instead of
+“EURUSD”.
+
+closealleaoff
+Close all positions and orders, and off/halt the PineConnector EA.
+
+This syntax will only close positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,closealleaoff,EURUSD
+
+Safety Measure
+The command will only work if the right symbol is indicated.
+Indicate the symbol where the PineConnector EA is running on. If the
+PineConnector EA is running on GBPJPY.a, indicate “GBPJPY.a” instead of
+“EURUSD”.
+
+closelong
+Close all buy positions of the specified symbol.
+
+This syntax will only close positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,closelong,EURUSD
+
+closeshort
+Close all sell positions of the specified symbol.
+
+This syntax will only close positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,closeshort,EURUSD
+
+closelongshort
+Close all buy and sell positions of the specified symbol.
+
+This syntax will only close positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,closelongshort,EURUSD
+
+closelongbuy
+Close all buy positions and open a new buy.
+
+This syntax will only close positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,closelongbuy,EURUSD,risk=1
+
+closeshortsell
+Close all sell positions and open a new sell.
+
+This syntax will only close positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,closeshortsell,EURUSD,risk=1
+
+newsltplong
+Modify the stop-loss (SL) and take-profit (TP) of the buy positions.
+New SL and TP are computed based on your selected Target Type on the EA.
+
+This syntax will only manage positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,newsltplong,EURUSD,sl=10
+LicenseID,newsltplong,EURUSD,tp=20
+LicenseID,newsltplong,EURUSD,sl=30,tp=60
+LicenseID,newsltplong,EURUSD,sl=1.12345 (price)
+LicenseID,newsltplong,EURUSD,sl=1,tp=2 (percentage)
+
+LicenseID,newsltplong,EURUSD,sl=0 (breakeven)
+
+Pips
+With sl=10, EA will compute your SL 10 pips away from the current market
+price.
+Percentage
+With sl=1, EA will compute your SL 1% away from the current market price.
+
+Move SL to Breakeven
+To move the SL of all your buy positions for the specified symbol to
+breakeven, indicate sl=0.
+
+Required Conditions
+Position is in profit
+Current market price is sufficiently far from the entry price
+If either of the conditions are not met, sending in a “newsltplong” with sl=0
+will result in the Error 130 on MT4 and Error 4756 (Invalid Price) on MT5.
+
+newsltpshort
+Modify the stop-loss (SL) and take-profit (TP) of the sell positions.
+New SL and TP are computed based on your selected Target Type on the EA.
+
+This syntax will only manage positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,newsltpshort,EURUSD,sl=10
+LicenseID,newsltpshort,EURUSD,tp=20
+LicenseID,newsltpshort,EURUSD,sl=30,tp=60
+LicenseID,newsltpshort,EURUSD,sl=1.12345 (price)
+LicenseID,newsltpshort,EURUSD,sl=1,tp=2 (percentage)
+LicenseID,newsltpshort,EURUSD,sl=0 (breakeven)
+
+Pips
+With sl=10, EA will compute your SL 10 pips away from the current market
+price.
+Percentage
+With sl=1, EA will compute your SL 1% away from the current market price.
+
+Move SL to Breakeven
+To move the SL of all your sell positions for the specified symbol to
+breakeven, indicate sl=0.
+
+Required Conditions
+Position is in profit
+Current market price is sufficiently far from the entry price
+If either of the conditions are not met, sending in a “newsltpshort” with
+sl=0 will result in the Error 130 on MT4 and Error 4756 (Invalid Price) on
+MT5.
+
+closelongpct
+Close a percentage of buy positions (based on your initial volume), using your
+selected partial close percentage in the EA (25%, 34%, and 50%).
+
+This syntax will only close positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,closelongpct,EURUSD
+
+closeshortpct
+Close a percentage of sell positions (based on your initial volume), using your
+selected partial close percentage in the EA (25%, 34%, and 50%).
+
+This syntax will only close positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,closeshortpct,EURUSD
+
+closelongvol
+Close buy positions up to the indicated value.
+risk= is a required parameter.
+
+This syntax will only close positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,closelongvol,EURUSD,risk=3
+LicenseID,closelongvol,EURUSD,risk=0.5
+
+Examples
+We have 3 open long positions, totalling 3.5 lots, arranged by the time they
+were opened:
+Position A: Buy 1 lot (opened first)
+Position B: Buy 2 lots (opened second)
+Position C: Buy 0.5 lots (opened last)
+
+1. Partial Closure Across Multiple Positions
+Command: closelongvol with risk=2.8
+Result:
+Position A will close fully from 1 lot to 0 lots.
+Position B will close 1.8 lots, leaving 0.2 lots remaining.
+Position C remains unaffected with 0.5 lots.
+2. Closing More Than the Total Volume
+Command: closelongvol with risk=4
+Result:
+Position A will close fully from 1 lot to 0 lots.
+Position B will close fully from 2 lots to 0 lots.
+Position C will close fully from 0.5 lots to 0 lots.
+Note: The total volume to close (4) exceeds the open positions (3.5),
+so all positions are closed.
+3. Closing Less Than the Smallest Position
+Command: closelongvol with risk=0.4
+Result:
+
+Position A will close 0.4 lots, leaving 0.6 lots remaining.
+Position B remains unaffected with 2 lots.
+Position C remains unaffected with 0.5 lots.
+4. Closing Exactly the Total Volume of Positions
+Command: closelongvol with risk=3.5
+Result:
+Position A will close fully from 1 lot to 0 lots.
+Position B will close fully from 2 lots to 0 lots.
+Position C will close fully from 0.5 lots to 0 lots.
+Note: The total volume to close matches the sum of all open positions,
+resulting in complete closure of all positions.
+
+closeshortvol
+Close sell positions up to the indicated value.
+risk= is a required parameter.
+
+This syntax will only close positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,closeshortvol,EURUSD,risk=3
+LicenseID,closeshortvol,EURUSD,risk=0.5
+
+Pending Orders
+Commands and syntax for pending orders such as buy stop, buy limit, sell stop and
+sell limit.
+
+price=
+
+required parameter for all pending orders such as buystop and buylimit
+
+Computing pending order entry price.
+EA Options: Pips, Specified Price, Percentage
+
+LicenseID,buystop,EURUSD,price=10,risk=1
+
+buystop
+Place buy stop above the current market price.
+price= is a required parameter.
+
+LicenseID,buystop,EURUSD,price=10,risk=1
+
+buylimit
+Place buy limit below the current market price.
+price= is a required parameter.
+
+LicenseID,buylimit,EURUSD,price=10,risk=1
+
+sellstop
+Place sell stop below the current market price.
+price= is a required parameter.
+
+LicenseID,sellstop,EURUSD,price=10,risk=1
+
+selllimit
+Place sell limit above the current market price.
+price= is a required parameter.
+
+LicenseID,selllimit,EURUSD,price=10,risk=1
+
+cancellong
+Cancels all long orders with the specified symbol.
+
+This syntax will only cancel positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,cancellong,EURUSD
+
+cancelshort
+Cancels all short orders with the specified symbol.
+
+This syntax will only cancel positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,cancelshort,EURUSD
+
+cancellongbuystop
+Cancels all long orders with the specified symbol and places a buystop order.
+risk= and price= are required parameters.
+
+This syntax will only cancel positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,cancellongbuystop,EURUSD,risk=1,price=10,sl=15,tp=20
+
+cancellongbuylimit
+Cancels all long orders with the specified symbol and places a buylimit order.
+risk= and price= are required parameters.
+
+This syntax will only cancel positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,cancellongbuylimit,EURUSD,risk=1,price=10,sl=15,tp=20
+
+cancelshortsellstop
+Cancels all short orders with the specified symbol and places a sellstop order.
+risk= and price= are required parameters.
+
+This syntax will only cancel positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,cancelshortsellstop,EURUSD,risk=1,price=10,sl=15,tp=20
+
+cancelshortselllimit
+Cancels all short orders with the specified symbol and places a selllimit order.
+risk= and price= are required parameters.
+
+This syntax will only cancel positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,cancelshortselllimit,EURUSD,risk=1,price=10,sl=15,tp=20
+
+newsltpbuystop
+Modify the stop-loss (SL) and take-profit (TP) of the buystop orders.
+New SL and TP are computed based on your selected Target Type on the EA.
+
+This syntax will only manage orders opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,newsltpbuystop,EURUSD,sl=10
+LicenseID,newsltpbuystop,EURUSD,tp=20
+LicenseID,newsltpbuystop,EURUSD,sl=30,tp=60
+
+newsltpbuylimit
+Modify the stop-loss (SL) and take-profit (TP) of the buylimit orders.
+New SL and TP are computed based on your selected Target Type on the EA.
+
+This syntax will only manage orders opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+This syntax will only cancel positions opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,newsltpbuylimit,EURUSD,sl=10
+LicenseID,newsltpbuylimit,EURUSD,tp=20
+LicenseID,newsltpbuylimit,EURUSD,sl=30,tp=60
+
+newsltpsellstop
+Modify the stop-loss (SL) and take-profit (TP) of the sellstop orders.
+New SL and TP are computed based on your selected Target Type on the EA.
+
+This syntax will only manage orders opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,newsltpsellstop,EURUSD,sl=10
+LicenseID,newsltpsellstop,EURUSD,tp=20
+
+LicenseID,newsltpsellstop,EURUSD,sl=30,tp=60
+
+newsltpselllimit
+Modify the stop-loss (SL) and take-profit (TP) of the selllimit orders.
+New SL and TP are computed based on your selected Target Type on the EA.
+
+This syntax will only manage orders opened by the PineConnector EA - to remove
+this restriction, turn Magic Restriction off in the EA.
+
+LicenseID,newsltpselllimit,EURUSD,sl=10
+LicenseID,newsltpselllimit,EURUSD,tp=20
+LicenseID,newsltpselllimit,EURUSD,sl=30,tp=60
+
+Breakeven
+The breakeven point is when your stop loss (SL) is set at your entry price, meaning if
+the SL is hit, there will be no losses.
+
+Instead of using the breakeven feature, which requires determining breakeven
+at the point of entry, you can use newsltplong or newsltpshort with sl=0
+to trigger the SL adjustment to breakeven at a later stage.
+Automatically move the SL of the position to breakeven when betrigger= is
+satisfied
+Ensure that beoffset < betrigger
+
+betrigger=
+Breakeven will be activated after the position gains this number of pips.
+Ensure > 0
+
+beoffset=
+Offset from entry price.
+0 means the SL will be placed exactly at entry price.
+1 means 1 pip above the entry price for buy trades and 1 pip below for sell trades.
+this is the amount of pips you'd like to protect.
+
+LicenseID,buy,EURUSD,risk=1,sl=20,betrigger=10,beoffset=2
+
+Ensure that the 2 parameters “betrigger=” and “beoffset=” are present in your
+syntax.
+
+Interpretation
+Buy 1 lot of EURUSD with SL 20 pips away from market price
+Breakeven feature to trigger after price moves 10 favourable pips and SL to be
+placed 2 pips above entry price
+
+Pip Trailing
+Automatically moves SL with the direction of the trade (up for longs, and down
+
+for shorts)
+All trailing parameters are restricted to integers — floats will be rounded to the
+nearest integer
+Trailing computation will be based on pips, regardless of the Target Type
+selected
+
+Spelling Bee
+Please check that you spell “trailing” correctly in your syntax. Some users
+faced syntax issues as they spelled it as “trialing”.
+
+trailtrig=
+Trailing stop-loss will be activated after a trade gains this number of pips.
+
+traildist=
+Distance of the trailing stop-loss from current price.
+SL will be opened at traildist after trailtrig is met, even if you do not have a SL placed.
+
+trailstep=
+Moves trailing stop-loss once price moves to favourable by a specified number of
+pips.
+
+LicenseID,buy,EURUSD,risk=1,trailtrig=12,traildist=8,trailstep=3
+
+Ensure that the 3 parameters “trailtrig=”, “traildist=” and “trailstep=” are present in
+your syntax.
+
+Interpretation
+With trailtrig=12, the first instance of trailing SL will be when price moves
+favourably for 12 pips (entry+12).
+The SL will be placed 8 pips lower at (entry+12-8).
+If you have a SL, the SL will be updated
+If you do not have a SL, a SL will be created for you
+With trailstep=3, the second instance of trailing SL is when price moves
+favourably for another 3 pips (entry+12+3).
+The SL will be placed at 8 pips lower at (entry+12+3-8).
+The third instance will be when price moves another 3 favourable
+pips (entry+12+3+3)
+The SL will be placed 8 pips lower at (entry+12+3+3-8), and so on.
+
+Negative “trailtrig=”
+You can use a negative 'trailtrig=' value to ensure immediate activation of the
+trailing feature. If you use 'trailtrig=0', the pip-trailing might only begin after the
+spread in pips.
+For example, you could use :
+trailtrig=-10,traildist=12,trailstep=1'
+With this configuration, the Expert Advisor (EA) will start pip-trailing
+immediately. The Stop Loss (SL) will be adjusted every 10 pips from the market
+price, and the SL will be moved every 1 pip in case of favorable movement.
+
+When trading non-FX, such as the US100, using a value of 10 may mean 1
+point in the index. Do test it first and refer to the Experts Tab — the EA will
+print trailing information such as the price where the trailing feature will begin
+
+ATR Trailing
+Please note that ATR Trailing is based on MetaTrader prices, not TradingView.
+As a result, minor discrepancies may occur.
+Instead of your SL trailing based on pips, your SL trails based on the ATR
+computed
+Only atrtimeframe= and atrperiod= are mandatory — other parameters are
+optional
+
+atrtimeframe=
+ATR Trailing Stop will be based on the specified timeframe in minutes and will only
+update once per bar close.
+If stop loss not specified at the point of entry, a SL will be automatically added with
+the ATR values used.
+
+Allowable timeframe values for MT4:
+1. 1 (1 minute),
+2. 5 (5 minutes),
+3. 15 (15 minutes),
+4. 30 (30 minutes),
+5. 60 (1 hour),
+6. 240 (4 hours),
+7. 1440 (1 day)
+
+MT5 Allowable Timeframes
+On MetaTrader 5, there are no limits to the allowable timeframe. You may
+input any timeframe value you prefer such as “atrtimeframe=10”.
+
+atrperiod=
+ATR averaging period
+
+atrmultiplier=
+Multiple of ATR to utilise in the new SL computation.
+Default = 1
+
+atrshift=
+Relative shift of price information, 0 uses latest candle, 1 uses second last, etc.
+Default: 0
+
+atrtrigger=
+Activate the trigger of ATR Trailing after market moves favourably by a number of
+pips.
+Default: 0 (instantaneous)
+
+LicenseID,buy,EURUSD,risk=1,sl=10,
+atrtimeframe=60,atrperiod=14,atrmultiplier=2,atrtrigger=8
+
+Ensure that at the 2 parameters “atrtimeframe=” and “atrperiod=” are present in your
+syntax. Other components are optional where they will use the default values as
+stated above.
+
+Interpretation
+Buy EURUSD at the market with SL placed 10 pips away
+ATR Trailing will begin after 8 pips of favorable move
+ATR is computed using the average of the previous 14 60-min candles,
+multiplied by 2.
+
+Filters
+spread=
+Enter the position only if the spread is equal or less than the specified value in pips.
+
+LicenseID,buy,EURUSD,risk=1,spread=2
+LicenseID,buy,EURUSD,risk=1,spread=1.22
+
+accfilter=
+Enter the position only if the account requirement is met.
+EA Options: Account Balance, Account Equity, Margin Percentage and Free Margin
+
+LicenseID,buy,EURUSD,risk=1,accfilter=500
+
+Assumption
+Account Balance EA option selected
+Interpretation
+If Account Balance is $500 or higher, process buy signal
+If Account Balance is less than $500, ignore buy signal
+
+Miscellaneous
+secret=
+Include this parameter to authenticate the signal with a specific secure key.
+
+You will only need to specify a secret key if you have Signal Authentication turned
+“On”.
+
+LicenseID,buy,EURUSD,risk=1,secret=SECRETKEY
+
+Self-Defined Secret Key
+The signal will only be relayed to your MetaTrader terminal if the provided
+secret key matches the secret key input in the PineConnector Portal.
+
+Sample Combined Syntax
+In this section, we will explore some syntax possibilities which are compliant.
+
+Market Orders (buy/sell)
+Syntax
+
+Interpretation
+• Enters a long AUDUSD trade
+
+60123456789,buy,AUDUSD,risk=0.01
+
+• Opens a 0.01 position size (“lots” volume
+type)
+• Enters a short volume GBPJPY trade
+
+60123456789,sell,GBPJPY,sl=50,tp=150
+,risk=1
+
+• Opens a 1 volume position (“lots” volume
+type)
+• SL and TP placed 50 and 150 pips from
+current price (”pips” target type)
+• Opens a buy EURUSD at the market if current
+
+60123456789,buy,EURUSD,risk=1,sprea
+d=3
+
+spread is 3 or lower
+• Opens a position with 1 volume (“lots” volume
+type)
+• No SL or TP will be added
+
+60123456789,closelong,GBPUSD
+
+• Closes the all GBPUSD long trades
+• Updates SL to 10 pips from current market
+
+60123456789,newsltplong,EURUSD,sl=1
+
+price (“pips” target type)
+
+0,tp=30
+
+• Updates TP to 30 pips from current market
+price (“pips” target type)
+
+With Pips or ATR Trailing, or Breakeven
+Syntax
+
+Interpretation
+• Opens a long EURUSD position
+• Volume is dynamically computed which risks
+1% of your account balance (“percentage of
+balance, loss” volume type)
+
+60123456789,buy,EURUSD,sl=1.20,risk=
+1, trailtrig=15,traildist=10,trailstep=12
+
+• Initial SL at 1.20 (“price” target type)
+• Trailing stop to activate when price moves
+favorably by 15 pips
+• Every 12 pips move in favor of direction, the
+stop-loss will move to 10 pips from current
+price
+• Opens a buy EURUSD at the market
+• Opens 5 volumes (“lots” volume type)
+
+60123456789,buy,EURUSD,sl=10,
+atrtimeframe=60,atrperiod=14,atrmultipl
+ier=2,atrtrigger=8,risk=1
+
+• SL placed 10 pips away (”pips” target type)
+• ATR Trailing will begin after 8 pips of
+favorable move.
+• ATR is computed using the average of the
+previous 14 60-min candles, multiplied by 2.
+• Opens a buy EURCAD at the market
+• Opens 5 volumes (“lots” volume type)
+
+60123456789,buy,EURCAD,sl=100,risk=
+
+• SL placed 10 pips away (”pips” target type)
+
+5,betrigger=30,beoffset=5
+• SL will be moved to (entry price + 5 pips)
+when price has moved favorably by 30 pips.
+
+Pending Orders (buylimit, selllimit, buystop, sellstop)
+Syntax
+
+Interpretation
+• Places a sell limit on EURUSD order
+• Entry price set at 1.2340 (”price” pending
+
+60123456789,selllimit,EURUSD,price=1.
+2340,sl=10,risk=1
+
+order entry type)
+• Opens a position with 1 volume (“lots” volume
+type)
+• SL placed 10 pips away from entry price
+(”pips” target type)
+• Cancels all long pending orders (buystop and
+
+60123456789,cancellong,EURUSD
+We have 3 open
+long positions, totaling 3.5 lots, arranged by the time they were opened:
+buylimit) for EURUSD
+
+Position A: Buy 1 lot (opened first)
+Position B: Buy 2 lots (opened second)
+Position C: Buy 0.5 lots (opened last)
+1. Scenario A: Partial Closure Across Multiple Positions
+Command: closelongvol with risk=2.8
+Result:
+Position A will close fully from 1 lot to 0 lots.
+Position B will close 1.8 lots, leaving 0.2 lots remaining.
+Position C remains unaffected with 0.5 lots.
+1. Scenario B: Closing More Than the Total Volume
+Command: closelongvol with risk=4
+Result:
+Position A will close fully from 1 lot to 0 lots.
+Position B will close fully from 2 lots to 0 lots.
+Position C will close fully from 0.5 lots to 0 lots.
+Note: The total volume to close (4) exceeds the open positions (3.5), so all positions are closed.
+1. Scenario C: Closing Less Than the Smallest Position
+Command: closelongvol with risk=0.4
+Result:
+Position A will close 0.4 lots, leaving 0.6 lots remaining.
+Position B remains unaffected with 2 lots.
+Position C remains unaffected with 0.5 lots.
+1. Scenario D: Closing Exactly the Total Volume of Positions
+Command: closelongvol with risk=3.5
+Result:
+Position A will close fully from 1 lot to 0 lots.
+Position B will close fully from 2 lots to 0 lots.
+Position C will close fully from 0.5 lots to 0 lots.
+Note: The total volume to close matches the sum of all open positions, resulting in complete closure of all positions.
+
+

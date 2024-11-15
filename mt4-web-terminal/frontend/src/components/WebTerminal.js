@@ -148,86 +148,54 @@ const WebTerminal = () => {
         };
     }, []);
 
-    const handleClosePosition = useCallback((ticket, percentage = 100) => {
-        if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-            console.error('WebSocket not connected');
-            return;
-        }
-        
-        const command = percentage === 100 
-            ? `CLOSE,${ticket}`
-            : `CLOSE,${ticket},${percentage}`;
-            
-        console.log('Sending close command:', command);
-        ws.current.send(JSON.stringify({
-            type: 'command',
-            data: command
-        }));
-    }, []);
-
-    const handleModifyPosition = useCallback((ticket, sl, tp) => {
-        if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-            console.error('WebSocket not connected');
-            return;
-        }
-        
-        console.log('Sending modify command:', `MODIFY,${ticket},${sl},${tp}`);
-        ws.current.send(JSON.stringify({
-            type: 'command',
-            data: `MODIFY,${ticket},${sl},${tp}`
-        }));
-    }, []);
-
-    const handleBreakeven = useCallback((ticket, pips = 0) => {
-        if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-            console.error('WebSocket not connected');
-            return;
-        }
-        
-        console.log('Sending breakeven command:', `BREAKEVEN,${ticket},${pips}`);
-        ws.current.send(JSON.stringify({
-            type: 'command',
-            data: `BREAKEVEN,${ticket},${pips}`
-        }));
-    }, []);
-
-    // Handle trade execution
-    const executeTrade = async (type) => {
+    const sendTradeCommand = async (action, symbol, params = {}) => {
         try {
-            console.log('Executing trade:', { type, ...newOrder });
             const response = await fetch('https://g1-back.onrender.com/api/trade', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    action: 'open',
-                    symbol: newOrder.symbol,
-                    type: type,
-                    lots: parseFloat(newOrder.lots),
-                    stopLoss: parseFloat(newOrder.stopLoss || 0),
-                    takeProfit: parseFloat(newOrder.takeProfit || 0)
-                })
+                    action,
+                    symbol,
+                    params
+                }),
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error('Failed to send trade command');
             }
 
-            const data = await response.json();
-            console.log('Trade response:', data);
-            
-            if (data.success) {
-                setSuccess('Order executed successfully!');
-                setError(null);
-                setTimeout(() => setSuccess(null), 3000);
-            } else {
-                setError(data.error || 'Failed to execute order');
-            }
+            const result = await response.json();
+            console.log('Trade command sent:', result);
         } catch (error) {
-            console.error('Trade error:', error);
-            setError('Network error: ' + error.message);
+            console.error('Error sending trade command:', error);
+            setError(error.message);
         }
+    };
+
+    const handleBuyClick = () => {
+        const params = {
+            risk: newOrder.lots,
+        };
+        if (newOrder.stopLoss) params.sl = newOrder.stopLoss;
+        if (newOrder.takeProfit) params.tp = newOrder.takeProfit;
+        
+        sendTradeCommand('buy', newOrder.symbol, params);
+    };
+
+    const handleSellClick = () => {
+        const params = {
+            risk: newOrder.lots,
+        };
+        if (newOrder.stopLoss) params.sl = newOrder.stopLoss;
+        if (newOrder.takeProfit) params.tp = newOrder.takeProfit;
+        
+        sendTradeCommand('sell', newOrder.symbol, params);
+    };
+
+    const handleClosePosition = (ticket) => {
+        sendTradeCommand('close', newOrder.symbol, { ticket });
     };
 
     const handleCloseAll = async () => {
@@ -731,7 +699,7 @@ const WebTerminal = () => {
                             </div>
                             <div className="grid grid-cols-2 gap-4 pt-2">
                                 <button
-                                    onClick={() => executeTrade(0)}
+                                    onClick={handleBuyClick}
                                     className="h-10 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg
                                              font-medium flex items-center justify-center gap-2 transition-all"
                                 >
@@ -739,7 +707,7 @@ const WebTerminal = () => {
                                     Buy
                                 </button>
                                 <button
-                                    onClick={() => executeTrade(1)}
+                                    onClick={handleSellClick}
                                     className="h-10 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg
                                              font-medium flex items-center justify-center gap-2 transition-all"
                                 >
@@ -893,8 +861,8 @@ const WebTerminal = () => {
                                                 <PositionActions
                                                     position={position}
                                                     onClose={handleClosePosition}
-                                                    onModify={handleModifyPosition}
-                                                    onBreakeven={handleBreakeven}
+                                                    onModify={(ticket, sl, tp) => sendTradeCommand('modify', newOrder.symbol, { ticket, sl, tp })}
+                                                    onBreakeven={(ticket, pips) => sendTradeCommand('breakeven', newOrder.symbol, { ticket, pips })}
                                                 />
                                             </td>
                                         </tr>

@@ -6,6 +6,9 @@ extern string   ServerURL = "https://g1-back.onrender.com";  // Server URL
 extern string   ApiKey = "";                                 // API Key
 extern int      UpdateInterval = 3;                         // Update interval in seconds
 
+// Magic number for identifying our trades
+#define MAGICMA 20240101
+
 // Global variables
 bool isConnected = false;
 string lastError = "";
@@ -100,8 +103,6 @@ string ExtractValueFromJson(string json, string key)
 //+------------------------------------------------------------------+
 void ProcessCommand(string rawCommand)
 {
-    Print("Processing command: ", rawCommand);
-    
     // Skip if empty command
     if (StringLen(rawCommand) == 0) return;
     
@@ -111,43 +112,30 @@ void ProcessCommand(string rawCommand)
     if (StringGetChar(rawCommand, 0) == '"') rawCommand = StringSubstr(rawCommand, 1);
     if (StringGetChar(rawCommand, StringLen(rawCommand)-1) == '"') rawCommand = StringSubstr(rawCommand, 0, StringLen(rawCommand)-1);
     
-    // Handle history requests
-    if (StringFind(rawCommand, "GET_HISTORY") == 0) {
-        string parts[];
-        StringSplit(rawCommand, '|', parts);
-        
-        string period = ArraySize(parts) > 1 ? parts[1] : "ALL";
-        string historyData = GetTradeHistory(period);
-        SendToServer(StringConcatenate("HISTORY|", historyData));
-        return;
-    }
-    
-    // Process trading commands
-    if (StringFind(rawCommand, "/ORDER") != 0) {
-        Print("Invalid command format, must start with /ORDER");
-        return;
-    }
-    
     // Split command into parts
     string parts[];
-    StringSplit(rawCommand, ' ', parts);
-    if (ArraySize(parts) < 3) {
-        Print("Invalid command format: not enough parts");
+    StringSplit(rawCommand, ',', parts);
+    
+    if (ArraySize(parts) < 2) return;
+    
+    string action = parts[0];
+    string symbol = parts[1];
+    
+    // Handle history requests
+    if (action == "GET_HISTORY") {
+        SendHistoryData(symbol);
         return;
     }
     
-    string symbol = parts[1];
-    string action = parts[2];
-    
-    // Parse parameters
-    string type = "";
-    double qty = 0;
+    // Handle trade commands
+    double qty = 0.1;  // default lot size
     double price = 0;
     double sl = 0;
     double tp = 0;
-    int ticket = 0;
+    string comment = "Web Terminal";
     
-    for (int i = 3; i < ArraySize(parts); i++) {
+    // Process parameters
+    for (int i = 2; i < ArraySize(parts); i++) {
         string param = parts[i];
         string key_value[];
         StringSplit(param, '=', key_value);
@@ -161,79 +149,25 @@ void ProcessCommand(string rawCommand)
         if (StringGetChar(value, 0) == '"') value = StringSubstr(value, 1);
         if (StringGetChar(value, StringLen(value)-1) == '"') value = StringSubstr(value, 0, StringLen(value)-1);
         
-        if (key == "type") type = value;
-        else if (key == "qty") qty = StringToDouble(value);
+        if (key == "risk") qty = StringToDouble(value);
         else if (key == "price") price = StringToDouble(value);
         else if (key == "sl") sl = StringToDouble(value);
         else if (key == "tp") tp = StringToDouble(value);
-        else if (key == "id") ticket = (int)StringToInteger(value);
+        else if (key == "comment") comment = value;
     }
     
-    // Execute commands
-    if (action == "MARKET") {
-        int orderType = type == "buy" ? OP_BUY : OP_SELL;
-        RefreshRates();
-        price = orderType == OP_BUY ? MarketInfo(symbol, MODE_ASK) : MarketInfo(symbol, MODE_BID);
-        
-        Print("Executing market order: ", symbol, " ", orderType, " ", qty, " @ ", price, " sl:", sl, " tp:", tp);
-        
-        if (qty <= 0) {
-            Print("Invalid lot size: ", qty);
-            return;
-        }
-        
-        int ticket = OrderSend(
-            symbol,          // Symbol
-            orderType,       // Operation
-            qty,            // Lots
-            price,          // Price
-            3,              // Slippage
-            sl,             // Stop Loss
-            tp,             // Take Profit
-            "Web Terminal", // Comment
-            0,             // Magic Number
-            0,             // Expiration
-            orderType == OP_BUY ? clrBlue : clrRed
-        );
-        
-        if (ticket < 0) {
-            int error = GetLastError();
-            Print("Order failed - Error: ", error);
-        } else {
-            Print("Order executed successfully. Ticket: ", ticket);
-        }
+    // Execute trade based on action
+    if (action == "buy") {
+        OrderSend(symbol, OP_BUY, qty, Ask, 3, sl, tp, comment, MAGICMA, 0, clrGreen);
     }
-    else if (action == "CLOSE") {
-        if (ticket <= 0) {
-            Print("Invalid ticket number");
-            return;
-        }
-        
-        if (!OrderSelect(ticket, SELECT_BY_TICKET)) {
-            Print("Order not found: ", ticket);
-            return;
-        }
-        
-        bool success = OrderClose(OrderTicket(), OrderLots(), OrderClosePrice(), 3, clrWhite);
-        if (!success) {
-            Print("Failed to close order: ", GetLastError());
-        }
+    else if (action == "sell") {
+        OrderSend(symbol, OP_SELL, qty, Bid, 3, sl, tp, comment, MAGICMA, 0, clrRed);
     }
-    else if (action == "MODIFY") {
-        if (ticket <= 0) {
-            Print("Invalid ticket number");
-            return;
-        }
-        
-        if (!OrderSelect(ticket, SELECT_BY_TICKET)) {
-            Print("Order not found: ", ticket);
-            return;
-        }
-        
-        bool success = OrderModify(ticket, OrderOpenPrice(), sl, tp, 0, clrYellow);
-        if (!success) {
-            Print("Failed to modify order: ", GetLastError());
-        }
+    else if (action == "closelong" || action == "closeshort") {
+        CloseAllPositions(symbol, action == "closelong" ? OP_BUY : OP_SELL);
+    }
+    else if (action == "closeall") {
+        CloseAllPositions(symbol, -1);
     }
 }
 
@@ -400,6 +334,49 @@ void SendToServer(string data)
         ProcessServerResponse(response);
         isConnected = true;
         lastError = "";
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Send history data to the client                                    |
+//+------------------------------------------------------------------+
+void SendHistoryData(string symbol) {
+    string historyData = GetTradeHistory("ALL");
+    SendToServer(StringConcatenate("HISTORY|", historyData));
+}
+
+//+------------------------------------------------------------------+
+//| Close all positions for a given symbol and type                    |
+//+------------------------------------------------------------------+
+void CloseAllPositions(string symbol, int type = -1) {
+    for (int i = OrdersTotal() - 1; i >= 0; i--) {
+        if (!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+        
+        // Skip if not our symbol
+        if (symbol != "" && OrderSymbol() != symbol) continue;
+        
+        // Skip if not our type (-1 means close all types)
+        if (type != -1 && OrderType() != type) continue;
+        
+        // Skip if not our EA's order
+        if (OrderMagicNumber() != MAGICMA) continue;
+        
+        bool result = false;
+        
+        RefreshRates();
+        
+        switch (OrderType()) {
+            case OP_BUY:
+                result = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), 3, clrRed);
+                break;
+            case OP_SELL:
+                result = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_ASK), 3, clrRed);
+                break;
+        }
+        
+        if (!result) {
+            Print("Failed to close order #", OrderTicket(), ": ", GetLastError());
+        }
     }
 }
 
