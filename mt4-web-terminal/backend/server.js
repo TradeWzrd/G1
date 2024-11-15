@@ -396,51 +396,55 @@ wss.on('connection', (ws) => {
     console.log('New client connected');
     clients.add(ws);
 
+    // Send initial state
     if (lastUpdate) {
         ws.send(JSON.stringify({
-            type: 'status',
+            type: 'update',
             connected: eaConnected,
             data: lastUpdate
         }));
     }
 
-    // Handle incoming messages from clients
+    // Handle incoming messages
     ws.on('message', (message) => {
         try {
-            const data = message.toString();
-            
-            if (data.startsWith('HISTORY|')) {
-                const historyData = JSON.parse(data.substring(8));
+            const data = JSON.parse(message);
+            console.log('Received WebSocket message:', data);
+
+            if (data.type === 'command') {
+                const [cmd, ...params] = data.command.split('|');
                 
-                // Find the oldest pending request and resolve it
-                const [oldestId] = historyRequests.keys();
-                if (oldestId) {
-                    const res = historyRequests.get(oldestId);
-                    historyRequests.delete(oldestId);
-                    res.json(historyData);
-                }
-                return;
-            }
-
-            const dataJson = JSON.parse(data);
-            console.log('Received WebSocket message:', dataJson);
-
-            if (dataJson.type === 'command') {
-                if (dataJson.data.startsWith('GET_HISTORY')) {
-                    // Forward history request to all connected clients (EA)
-                    wss.clients.forEach(client => {
-                        if (client !== ws && client.readyState === WebSocket.OPEN) {
-                            client.send(`COMMAND|${dataJson.data}`);
-                        }
+                if (cmd === 'GET_HISTORY') {
+                    const period = params[0];
+                    console.log('Processing history request for period:', period);
+                    
+                    // Add command to pending queue for EA to process
+                    pendingCommands.push(data.command);
+                    
+                    // Create a promise to track this request
+                    const requestId = Date.now().toString();
+                    const requestPromise = new Promise((resolve) => {
+                        historyRequests.set(requestId, resolve);
+                        
+                        // Timeout after 30 seconds
+                        setTimeout(() => {
+                            if (historyRequests.has(requestId)) {
+                                historyRequests.delete(requestId);
+                                ws.send(JSON.stringify({
+                                    type: 'error',
+                                    error: 'History request timed out'
+                                }));
+                            }
+                        }, 30000);
                     });
                 }
-                
-                // Add command to pending queue
-                pendingCommands.push(dataJson.data);
-                console.log('Added command to queue:', dataJson.data);
             }
         } catch (error) {
             console.error('Error processing WebSocket message:', error);
+            ws.send(JSON.stringify({
+                type: 'error',
+                error: 'Failed to process command'
+            }));
         }
     });
 

@@ -468,16 +468,29 @@ const WebTerminal = () => {
             if (!ws.current) {
                 ws.current = new WebSocket('wss://g1-back.onrender.com');
                 
+                ws.current.onopen = () => {
+                    console.log('WebSocket connected');
+                };
+                
                 ws.current.onmessage = (event) => {
                     try {
                         const message = JSON.parse(event.data);
+                        console.log('Received WebSocket message:', message);
                         if (message.type === 'tradeHistory') {
                             setHistory(message.data);
                             setLoading(false);
                         }
                     } catch (error) {
                         console.error('Error parsing WebSocket message:', error);
+                        setError('Failed to parse history data');
+                        setLoading(false);
                     }
+                };
+
+                ws.current.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    setError('WebSocket connection error');
+                    setLoading(false);
                 };
             }
 
@@ -488,23 +501,23 @@ const WebTerminal = () => {
             };
         }, []);
         
-        const fetchHistory = () => {
+        const syncHistory = () => {
             setLoading(true);
             setError('');
             
             try {
-                if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                    let command = `GET_HISTORY|${period}`;
-                    if (period === 'custom') {
-                        command += `|${customRange.startDate}|${customRange.endDate}`;
-                    }
+                if (ws.current?.readyState === WebSocket.OPEN) {
+                    const command = period === 'custom'
+                        ? `GET_HISTORY|${period}|${customRange.startDate}|${customRange.endDate}`
+                        : `GET_HISTORY|${period}`;
                     
+                    console.log('Sending history request:', command);
                     ws.current.send(JSON.stringify({
                         type: 'command',
-                        data: command
+                        command: command
                     }));
                 } else {
-                    setError('WebSocket connection not available');
+                    setError('WebSocket not connected. Please try again.');
                     setLoading(false);
                 }
             } catch (error) {
@@ -589,14 +602,14 @@ const WebTerminal = () => {
                     )}
 
                     <button
+                        onClick={syncHistory}
+                        disabled={loading || (period === 'custom' && (!customRange.startDate || !customRange.endDate))}
                         className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded flex items-center space-x-2"
-                        onClick={fetchHistory}
-                        disabled={loading}
                     >
                         {loading ? (
                             <span className="animate-spin">⟳</span>
                         ) : (
-                            <span>Fetch History</span>
+                            <span>Sync History</span>
                         )}
                     </button>
                 </div>
