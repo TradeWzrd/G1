@@ -17,6 +17,8 @@ const WebTerminal = () => {
         takeProfit: 0
     });
     const [lastUpdate, setLastUpdate] = useState(null);
+    const [tradeHistory, setTradeHistory] = useState([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
 
     // WebSocket reference and reconnection settings
     const ws = useRef(null);
@@ -109,9 +111,42 @@ const WebTerminal = () => {
                                 setLastUpdate(data.data);
                             }
                         }
+                        setLastUpdate(new Date());
+                    } else if (data.type === 'tradeHistory') {
+                        // Handle trade history response
+                        console.log('Processing trade history:', data.data);
+                        if (data.data) {
+                            const trades = data.data.split(';').filter(Boolean).map(trade => {
+                                const [
+                                    ticket, symbol, type, lots, openPrice, closePrice, 
+                                    openTime, closeTime, profit, commission, swap
+                                ] = trade.split(',');
+                                return {
+                                    ticket: parseInt(ticket),
+                                    symbol,
+                                    type: parseInt(type),
+                                    lots: parseFloat(lots),
+                                    openPrice: parseFloat(openPrice),
+                                    closePrice: parseFloat(closePrice),
+                                    openTime,
+                                    closeTime,
+                                    profit: parseFloat(profit),
+                                    commission: parseFloat(commission),
+                                    swap: parseFloat(swap)
+                                };
+                            });
+                            setTradeHistory(trades);
+                        }
+                        setHistoryLoading(false);
+                    } else if (data.type === 'error') {
+                        console.error('Server error:', data.error);
+                        setError(data.error);
+                        setHistoryLoading(false);
                     }
                 } catch (error) {
-                    console.error('Error parsing message:', error);
+                    console.error('Error processing message:', error);
+                    setError('Failed to process server response');
+                    setHistoryLoading(false);
                 }
             };
         } catch (error) {
@@ -234,6 +269,42 @@ const WebTerminal = () => {
         } catch (error) {
             console.error('Close all error:', error);
             setError('Network error: ' + error.message);
+        }
+    };
+
+    const syncHistory = (period, customRange = null) => {
+        if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
+            console.error('WebSocket not connected');
+            setError('Not connected to server. Attempting to reconnect...');
+            connectWebSocket();
+            return;
+        }
+
+        setHistoryLoading(true);
+        setError('');
+        
+        try {
+            const command = {
+                type: 'command',
+                command: customRange
+                    ? `GET_HISTORY|custom|${customRange.startDate}|${customRange.endDate}`
+                    : `GET_HISTORY|${period}`
+            };
+            
+            console.log('Sending history request:', command);
+            ws.current.send(JSON.stringify(command));
+            
+            // Set a timeout for the request
+            setTimeout(() => {
+                if (historyLoading) {
+                    setHistoryLoading(false);
+                    setError('Request timed out. Please try again.');
+                }
+            }, 30000);
+        } catch (error) {
+            console.error('Error sending history request:', error);
+            setError('Failed to send request: ' + error.message);
+            setHistoryLoading(false);
         }
     };
 
@@ -407,130 +478,13 @@ const WebTerminal = () => {
     };
 
     const TradeHistory = () => {
-        const [history, setHistory] = useState([]);
         const [period, setPeriod] = useState('today');
         const [customRange, setCustomRange] = useState({ startDate: '', endDate: '' });
-        const [loading, setLoading] = useState(false);
-        const [error, setError] = useState('');
         const [sortField, setSortField] = useState('closeTime');
         const [sortDirection, setSortDirection] = useState('desc');
-        const [connected, setConnected] = useState(false);
-        const ws = useRef(null);
-
-        useEffect(() => {
-            connectWebSocket();
-            return () => {
-                if (ws.current) {
-                    ws.current.close();
-                }
-            };
-        }, []);
-
-        const connectWebSocket = () => {
-            if (!ws.current || ws.current.readyState === WebSocket.CLOSED) {
-                console.log('Connecting to WebSocket...');
-                ws.current = new WebSocket('wss://g1-back.onrender.com');
-                
-                ws.current.onopen = () => {
-                    console.log('WebSocket connected successfully');
-                    setConnected(true);
-                    setError('');
-                };
-                
-                ws.current.onmessage = (event) => {
-                    try {
-                        console.log('Raw WebSocket message received:', event.data);
-                        const message = JSON.parse(event.data);
-                        console.log('Parsed WebSocket message:', message);
-                        
-                        if (message.type === 'tradeHistory') {
-                            console.log('Processing trade history:', message.data);
-                            const trades = message.data.split(';').map(trade => {
-                                const [
-                                    ticket, symbol, type, lots, openPrice, closePrice, 
-                                    openTime, closeTime, profit, commission, swap
-                                ] = trade.split(',');
-                                return {
-                                    ticket: parseInt(ticket),
-                                    symbol,
-                                    type: parseInt(type),
-                                    lots: parseFloat(lots),
-                                    openPrice: parseFloat(openPrice),
-                                    closePrice: parseFloat(closePrice),
-                                    openTime,
-                                    closeTime,
-                                    profit: parseFloat(profit),
-                                    commission: parseFloat(commission),
-                                    swap: parseFloat(swap)
-                                };
-                            });
-                            setHistory(trades);
-                            setLoading(false);
-                        } else if (message.type === 'error') {
-                            console.error('Server error:', message.error);
-                            setError(message.error);
-                            setLoading(false);
-                        }
-                    } catch (error) {
-                        console.error('Error processing WebSocket message:', error);
-                        setError('Failed to process server response');
-                        setLoading(false);
-                    }
-                };
-
-                ws.current.onerror = (error) => {
-                    console.error('WebSocket error:', error);
-                    setError('Connection error occurred');
-                    setConnected(false);
-                };
-
-                ws.current.onclose = () => {
-                    console.log('WebSocket connection closed');
-                    setConnected(false);
-                    // Attempt to reconnect after 3 seconds
-                    setTimeout(connectWebSocket, 3000);
-                };
-            }
-        };
-        
-        const syncHistory = () => {
-            if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-                console.error('WebSocket not connected');
-                setError('Not connected to server. Attempting to reconnect...');
-                connectWebSocket();
-                return;
-            }
-
-            setLoading(true);
-            setError('');
-            
-            try {
-                const command = {
-                    type: 'command',
-                    command: period === 'custom'
-                        ? `GET_HISTORY|${period}|${customRange.startDate}|${customRange.endDate}`
-                        : `GET_HISTORY|${period}`
-                };
-                
-                console.log('Sending history request:', command);
-                ws.current.send(JSON.stringify(command));
-                
-                // Set a timeout for the request
-                setTimeout(() => {
-                    if (loading) {
-                        setLoading(false);
-                        setError('Request timed out. Please try again.');
-                    }
-                }, 30000);
-            } catch (error) {
-                console.error('Error sending history request:', error);
-                setError('Failed to send request: ' + error.message);
-                setLoading(false);
-            }
-        };
 
         const sortedHistory = useMemo(() => {
-            return [...history].sort((a, b) => {
+            return [...tradeHistory].sort((a, b) => {
                 if (sortField === 'closeTime') {
                     return sortDirection === 'desc' 
                         ? new Date(b.closeTime) - new Date(a.closeTime)
@@ -540,7 +494,7 @@ const WebTerminal = () => {
                     ? b[sortField] - a[sortField]
                     : a[sortField] - b[sortField];
             });
-        }, [history, sortField, sortDirection]);
+        }, [tradeHistory, sortField, sortDirection]);
 
         const handleSort = (field) => {
             if (field === sortField) {
@@ -604,11 +558,11 @@ const WebTerminal = () => {
                     )}
 
                     <button
-                        onClick={syncHistory}
-                        disabled={loading || (period === 'custom' && (!customRange.startDate || !customRange.endDate))}
-                        className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded flex items-center space-x-2"
+                        onClick={() => syncHistory(period, period === 'custom' ? customRange : null)}
+                        disabled={historyLoading || (period === 'custom' && (!customRange.startDate || !customRange.endDate))}
+                        className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
                     >
-                        {loading ? (
+                        {historyLoading ? (
                             <span className="animate-spin">⟳</span>
                         ) : (
                             <span>Sync History</span>

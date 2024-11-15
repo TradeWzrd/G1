@@ -468,43 +468,60 @@ wss.on('connection', (ws) => {
     });
 });
 
-// Handle trade history from EA
+// Trade history endpoint for EA
 app.post('/api/trade-history/ea', express.text(), (req, res) => {
     try {
-        console.log('Received trade history from EA');
+        console.log('Received trade history from EA:', req.body);
         const historyData = req.body;
 
-        if (!historyData) {
-            console.error('No history data received');
-            return res.status(400).json({
-                success: false,
-                error: 'No history data received'
+        // Process history data
+        if (historyData) {
+            const trades = historyData.split(';').filter(Boolean).map(trade => {
+                const [
+                    ticket, symbol, type, lots, openPrice, closePrice, 
+                    openTime, closeTime, profit, commission, swap
+                ] = trade.split(',');
+                return {
+                    ticket: parseInt(ticket),
+                    symbol,
+                    type: parseInt(type),
+                    lots: parseFloat(lots),
+                    openPrice: parseFloat(openPrice),
+                    closePrice: parseFloat(closePrice),
+                    openTime: new Date(openTime),
+                    closeTime: new Date(closeTime),
+                    profit: parseFloat(profit),
+                    commission: parseFloat(commission),
+                    swap: parseFloat(swap),
+                    total: parseFloat(profit) + parseFloat(commission) + parseFloat(swap)
+                };
             });
-        }
 
-        // Broadcast to all connected WebSocket clients
-        wss.clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-                try {
-                    const message = JSON.stringify({
-                        type: 'tradeHistory',
-                        data: historyData
-                    });
-                    console.log('Broadcasting history to client');
-                    client.send(message);
-                } catch (error) {
-                    console.error('Error sending history to client:', error);
-                }
+            // Find the history request tracker
+            const requestId = [...historyRequests.keys()].find(key => {
+                const request = historyRequests.get(key);
+                return Date.now() - request.timestamp < 30000; // Within 30 seconds
+            });
+
+            if (requestId) {
+                const request = historyRequests.get(requestId);
+                historyRequests.delete(requestId);
+
+                // Broadcast the history to the requesting client
+                broadcast({
+                    type: 'tradeHistory',
+                    data: historyData,
+                    requestId: requestId
+                });
             }
-        });
 
-        res.json({ success: true });
+            res.json({ success: true });
+        } else {
+            res.json({ success: false, error: 'No history data received' });
+        }
     } catch (error) {
         console.error('Error processing trade history:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
-        });
+        res.json({ success: false, error: error.message });
     }
 });
 
