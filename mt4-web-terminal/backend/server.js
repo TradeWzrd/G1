@@ -429,6 +429,15 @@ wss.on('connection', (ws) => {
             console.log('Received WebSocket message:', dataJson);
 
             if (dataJson.type === 'command') {
+                if (dataJson.data.startsWith('GET_HISTORY')) {
+                    // Forward history request to all connected clients (EA)
+                    wss.clients.forEach(client => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            client.send(`COMMAND|${dataJson.data}`);
+                        }
+                    });
+                }
+                
                 // Add command to pending queue
                 pendingCommands.push(dataJson.data);
                 console.log('Added command to queue:', dataJson.data);
@@ -442,6 +451,33 @@ wss.on('connection', (ws) => {
         console.log('Client disconnected');
         clients.delete(ws);
     });
+});
+
+// Add to your imports
+const historyRequests = new Map();
+
+// Add this endpoint
+app.post('/api/trade-history/ea', (req, res) => {
+    try {
+        // Parse the raw JSON data from EA
+        const historyData = req.body;
+        console.log('Received trade history:', historyData);
+
+        // Broadcast to all connected WebSocket clients
+        wss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                    type: 'tradeHistory',
+                    data: historyData
+                }));
+            }
+        });
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error processing trade history:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 const PORT = process.env.PORT || 3000;

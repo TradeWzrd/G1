@@ -458,26 +458,58 @@ const WebTerminal = () => {
         const [period, setPeriod] = useState('today');
         const [customRange, setCustomRange] = useState({ startDate: '', endDate: '' });
         const [loading, setLoading] = useState(false);
+        const [error, setError] = useState('');
         const [sortField, setSortField] = useState('closeTime');
         const [sortDirection, setSortDirection] = useState('desc');
+        const ws = useRef(null);
+
+        useEffect(() => {
+            // Connect to WebSocket if not already connected
+            if (!ws.current) {
+                ws.current = new WebSocket('wss://g1-back.onrender.com');
+                
+                ws.current.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        if (message.type === 'tradeHistory') {
+                            setHistory(message.data);
+                            setLoading(false);
+                        }
+                    } catch (error) {
+                        console.error('Error parsing WebSocket message:', error);
+                    }
+                };
+            }
+
+            return () => {
+                if (ws.current) {
+                    ws.current.close();
+                }
+            };
+        }, []);
         
-        const fetchHistory = async () => {
+        const fetchHistory = () => {
             setLoading(true);
+            setError('');
+            
             try {
-                let url = `https://g1-back.onrender.com/api/trade-history/ea?period=${period}`;
-                if (period === 'custom') {
-                    url += `&startDate=${customRange.startDate}&endDate=${customRange.endDate}`;
+                if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                    let command = `GET_HISTORY|${period}`;
+                    if (period === 'custom') {
+                        command += `|${customRange.startDate}|${customRange.endDate}`;
+                    }
+                    
+                    ws.current.send(JSON.stringify({
+                        type: 'command',
+                        data: command
+                    }));
+                } else {
+                    setError('WebSocket connection not available');
+                    setLoading(false);
                 }
-                const response = await fetch(url);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                setHistory(data);
             } catch (error) {
-                console.error('Error fetching trade history:', error);
-                setError('Failed to fetch trade history. Please try again.');
-            } finally {
+                console.error('Error sending history request:', error);
+                setError('Failed to request trade history');
                 setLoading(false);
             }
         };

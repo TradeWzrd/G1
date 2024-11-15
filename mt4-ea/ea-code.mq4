@@ -15,7 +15,7 @@ string lastError = "";
 //+------------------------------------------------------------------+
 string CreateUpdateString()
 {
-    // Format: ACCOUNT|balance;equity;margin;freeMargin|POSITIONS|ticket,symbol,type,lots,openPrice,sl,tp,profit|HISTORY|ticket,symbol,type,lots,openPrice,closePrice,openTime,closeTime,profit
+    // Format: ACCOUNT|balance;equity;margin;freeMargin|POSITIONS|ticket,symbol,type,lots,openPrice,sl,tp,profit
     string data = "ACCOUNT|";
     
     // Account data
@@ -42,31 +42,6 @@ string CreateUpdateString()
             data += DoubleToStr(OrderProfit(), 2);
             
             firstPosition = false;
-        }
-    }
-    
-    // Add history
-    data += "|HISTORY|";
-    bool firstHistory = true;
-    
-    // Get history for last 100 closed trades
-    for(int i = 0; i < OrdersHistoryTotal(); i++) {
-        if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) {
-            if(!firstHistory) data += ";";
-            
-            data += OrderTicket() + ",";
-            data += OrderSymbol() + ",";
-            data += OrderType() + ",";
-            data += DoubleToStr(OrderLots(), 2) + ",";
-            data += DoubleToStr(OrderOpenPrice(), 5) + ",";
-            data += DoubleToStr(OrderClosePrice(), 5) + ",";
-            data += TimeToStr(OrderOpenTime(), TIME_DATE|TIME_SECONDS) + ",";
-            data += TimeToStr(OrderCloseTime(), TIME_DATE|TIME_SECONDS) + ",";
-            data += DoubleToStr(OrderProfit(), 2) + ",";
-            data += DoubleToStr(OrderCommission(), 2) + ",";
-            data += DoubleToStr(OrderSwap(), 2);
-            
-            firstHistory = false;
         }
     }
     
@@ -412,6 +387,71 @@ void SendUpdate()
 }
 
 //+------------------------------------------------------------------+
+//| Get trade history function                                        |
+//+------------------------------------------------------------------+
+string GetTradeHistory(string period, datetime startDate, datetime endDate)
+{
+    datetime filterStart = 0;
+    datetime filterEnd = TimeCurrent();
+    
+    // Calculate filter dates based on period
+    if(period == "today") {
+        filterStart = StringToTime(TimeToStr(TimeCurrent(), TIME_DATE));
+    }
+    else if(period == "last3days") {
+        filterStart = TimeCurrent() - 3 * 24 * 60 * 60;
+    }
+    else if(period == "lastWeek") {
+        filterStart = TimeCurrent() - 7 * 24 * 60 * 60;
+    }
+    else if(period == "lastMonth") {
+        filterStart = TimeCurrent() - 30 * 24 * 60 * 60;
+    }
+    else if(period == "last3Months") {
+        filterStart = TimeCurrent() - 90 * 24 * 60 * 60;
+    }
+    else if(period == "last6Months") {
+        filterStart = TimeCurrent() - 180 * 24 * 60 * 60;
+    }
+    else if(period == "custom" && startDate > 0 && endDate > 0) {
+        filterStart = startDate;
+        filterEnd = endDate;
+    }
+    
+    string history = "[";
+    bool firstTrade = true;
+    
+    for(int i = OrdersHistoryTotal() - 1; i >= 0; i--) {
+        if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) {
+            datetime closeTime = OrderCloseTime();
+            
+            // Skip if outside filter range
+            if(closeTime < filterStart || closeTime > filterEnd) continue;
+            
+            if(!firstTrade) history += ",";
+            firstTrade = false;
+            
+            history += "{";
+            history += "\"ticket\":" + IntegerToString(OrderTicket()) + ",";
+            history += "\"type\":" + IntegerToString(OrderType()) + ",";
+            history += "\"lots\":" + DoubleToStr(OrderLots(), 2) + ",";
+            history += "\"symbol\":\"" + OrderSymbol() + "\",";
+            history += "\"openPrice\":" + DoubleToStr(OrderOpenPrice(), 5) + ",";
+            history += "\"closePrice\":" + DoubleToStr(OrderClosePrice(), 5) + ",";
+            history += "\"closeTime\":\"" + TimeToStr(OrderCloseTime(), TIME_DATE|TIME_SECONDS) + "\",";
+            history += "\"profit\":" + DoubleToStr(OrderProfit(), 2) + ",";
+            history += "\"commission\":" + DoubleToStr(OrderCommission(), 2) + ",";
+            history += "\"swap\":" + DoubleToStr(OrderSwap(), 2) + ",";
+            history += "\"total\":" + DoubleToStr(OrderProfit() + OrderCommission() + OrderSwap(), 2);
+            history += "}";
+        }
+    }
+    
+    history += "]";
+    return history;
+}
+
+//+------------------------------------------------------------------+
 //| Timer function                                                    |
 //+------------------------------------------------------------------+
 void OnTimer()
@@ -476,7 +516,7 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
                 string historyData = GetTradeHistory(period, startDate, endDate);
                 
                 // Send history data using WebRequest
-                string headers = "Content-Type: text/plain\r\n";
+                string headers = "Content-Type: application/json\r\n";
                 if(StringLen(ApiKey) > 0) {
                     headers += "X-API-Key: " + ApiKey + "\r\n";
                 }
@@ -489,7 +529,7 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
                 
                 int res = WebRequest(
                     "POST",
-                    ServerURL + "/api/mt4/history",
+                    ServerURL + "/api/trade-history/ea",
                     headers,
                     5000,
                     post,
@@ -499,75 +539,12 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
                 
                 if(res == -1) {
                     Print("Error sending history data: ", GetLastError());
+                } else {
+                    Print("History data sent successfully");
                 }
                 
                 return;
             }
         }
     }
-}
-
-//+------------------------------------------------------------------+
-//| Get trade history function                                        |
-//+------------------------------------------------------------------+
-string GetTradeHistory(string period, datetime startDate, datetime endDate)
-{
-    datetime filterStart = 0;
-    datetime filterEnd = TimeCurrent();
-    
-    // Calculate filter dates based on period
-    if(period == "today") {
-        filterStart = StringToTime(TimeToString(TimeCurrent(), TIME_DATE));
-    }
-    else if(period == "last3days") {
-        filterStart = TimeCurrent() - 3 * 24 * 60 * 60;
-    }
-    else if(period == "lastWeek") {
-        filterStart = TimeCurrent() - 7 * 24 * 60 * 60;
-    }
-    else if(period == "lastMonth") {
-        filterStart = TimeCurrent() - 30 * 24 * 60 * 60;
-    }
-    else if(period == "last3Months") {
-        filterStart = TimeCurrent() - 90 * 24 * 60 * 60;
-    }
-    else if(period == "last6Months") {
-        filterStart = TimeCurrent() - 180 * 24 * 60 * 60;
-    }
-    else if(period == "custom" && startDate > 0 && endDate > 0) {
-        filterStart = startDate;
-        filterEnd = endDate;
-    }
-    
-    string history = "HISTORY|[";
-    bool firstTrade = true;
-    
-    for(int i = OrdersHistoryTotal() - 1; i >= 0; i--) {
-        if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) {
-            datetime closeTime = OrderCloseTime();
-            
-            // Skip if outside filter range
-            if(closeTime < filterStart || closeTime > filterEnd) continue;
-            
-            if(!firstTrade) history += ",";
-            firstTrade = false;
-            
-            history += "{";
-            history += "\"ticket\":" + IntegerToString(OrderTicket()) + ",";
-            history += "\"type\":" + IntegerToString(OrderType()) + ",";
-            history += "\"lots\":" + DoubleToString(OrderLots(), 2) + ",";
-            history += "\"symbol\":\"" + OrderSymbol() + "\",";
-            history += "\"openPrice\":" + DoubleToString(OrderOpenPrice(), 5) + ",";
-            history += "\"closePrice\":" + DoubleToString(OrderClosePrice(), 5) + ",";
-            history += "\"closeTime\":\"" + TimeToString(OrderCloseTime(), TIME_DATE|TIME_SECONDS) + "\",";
-            history += "\"profit\":" + DoubleToString(OrderProfit(), 2) + ",";
-            history += "\"commission\":" + DoubleToString(OrderCommission(), 2) + ",";
-            history += "\"swap\":" + DoubleToString(OrderSwap(), 2) + ",";
-            history += "\"total\":" + DoubleToString(OrderProfit() + OrderCommission() + OrderSwap(), 2);
-            history += "}";
-        }
-    }
-    
-    history += "]";
-    return history;
 }
