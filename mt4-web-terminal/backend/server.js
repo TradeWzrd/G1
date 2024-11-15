@@ -1,33 +1,32 @@
 const express = require('express');
-const cors = require('cors');
-const morgan = require('morgan');
+const http = require('http');
 const WebSocket = require('ws');
-const { createServer } = require('http');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const morgan = require('morgan');
 
 const app = express();
-const server = createServer(app);
+const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+
+// Global variables
+const clients = new Set();
+const pendingCommands = [];
+const historyRequests = new Map();
+
+// Store trade history
+let tradeHistory = [];
+
+// Store connected clients and pending commands
+let lastUpdate = null;
+let eaConnected = false;
+let lastEAUpdate = null;
 
 // Use text parser instead of JSON parser for MT4 updates
 app.use(express.text());
 app.use(express.json());
 app.use(cors());
 app.use(morgan('dev'));
-
-// Store connected clients and pending commands
-const clients = new Set();
-let lastUpdate = null;
-let eaConnected = false;
-let lastEAUpdate = null;
-
-// Store pending commands
-let pendingCommands = [];
-
-// Store trade history
-let tradeHistory = [];
-
-// Store history requests
-const historyRequests = new Map();
 
 // Function to parse incoming data
 function parseData(dataString) {
@@ -453,10 +452,6 @@ wss.on('connection', (ws) => {
     });
 });
 
-// Add to your imports
-const historyRequests = new Map();
-
-// Add this endpoint
 app.post('/api/trade-history/ea', (req, res) => {
     try {
         // Parse the raw JSON data from EA
