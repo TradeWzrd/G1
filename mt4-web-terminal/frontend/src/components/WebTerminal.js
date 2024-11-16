@@ -3,6 +3,7 @@ import { X, TrendingUp, TrendingDown, DollarSign, Wallet, Activity, RefreshCw, B
          ArrowUpCircle, ArrowDownCircle, CheckCircle2, AlertCircle, Settings, Save, LayoutGrid, 
          RotateCcw, Package } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
+import ThemeCustomizer from './ThemeCustomizer';
 import { CustomLayout } from './CustomLayout';
 import { Dialog } from './Dialog';
 
@@ -504,8 +505,8 @@ const WebTerminal = () => {
 
             const command = {
                 type: 'command',
-                command: `${type === 0 ? 'BUY' : 'SELL'}`,
-                data: `${newOrder.symbol},${newOrder.lots},${newOrder.stopLoss || 0},${newOrder.takeProfit || 0}`,
+                command: 'TRADE',
+                data: `${type === 0 ? 'BUY' : 'SELL'},${newOrder.symbol},${newOrder.lots},${newOrder.stopLoss || 0},${newOrder.takeProfit || 0}`,
                 timestamp: Date.now()
             };
 
@@ -907,6 +908,7 @@ const WebTerminal = () => {
                     <div className="flex justify-between items-center">
                         <h1 className="text-2xl font-bold">MT4 Web Terminal</h1>
                         <div className="flex items-center space-x-3">
+                            <ThemeCustomizer />
                             <ThemeToggle />
                             <button
                                 onClick={() => setShowSettings(true)}
@@ -1196,9 +1198,7 @@ const WebTerminal = () => {
                                             <span className="font-medium capitalize mb-1">
                                                 {preset} Layout
                                             </span>
-                                            <span className="text-sm text-magic-muted">
-                                                {config.description}
-                                            </span>
+                                            <span className="text-sm text-magic-muted mt-1">{config.description}</span>
                                         </button>
                                     ))}
                                 </div>
@@ -1248,7 +1248,7 @@ const WebTerminal = () => {
                                 </div>
                             </div>
 
-                            {/* Additional Settings */}
+                            {/* Theme Settings */}
                             <div className="space-y-4 border-t border-magic-border pt-4">
                                 <h3 className="text-lg font-medium">Display Settings</h3>
                                 <div className="space-y-3">
@@ -1256,7 +1256,9 @@ const WebTerminal = () => {
                                         <label className="text-sm font-medium">Dark Mode</label>
                                         <ThemeToggle />
                                     </div>
-                                    {/* Add more display settings as needed */}
+                                    <div className="bg-magic-card rounded-lg border border-magic-border p-4">
+                                        <ThemeCustomizer />
+                                    </div>
                                 </div>
                             </div>
                         </div>

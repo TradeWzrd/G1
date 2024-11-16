@@ -500,9 +500,19 @@ function processCommand(command) {
                 command: command.data,
                 requestId
             }));
-        } else {
-            // Handle other trade commands
+        } else if (command.command === 'TRADE') {
+            // Handle trade commands
             console.log('Processing trade command:', command.data);
+            pendingCommands.push(command.data);
+            
+            // Broadcast command to EA
+            broadcast(JSON.stringify({
+                type: 'command',
+                command: command.data
+            }));
+        } else {
+            // Handle other commands
+            console.log('Processing other command:', command.data);
             pendingCommands.push(command.data);
             
             // Broadcast command to EA
