@@ -951,7 +951,7 @@ const WebTerminal = () => {
                             <h2 className="text-lg sm:text-xl font-semibold">Account Information</h2>
                         </div>
                         <div className="p-3 sm:p-4 md:p-6 overflow-y-auto">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                                 {accountData && Object.entries(accountData).map(([key, value]) => (
                                     <div key={key} className="p-3 sm:p-4 rounded-lg bg-magic-hover/50 border border-magic-border transition-all hover:border-magic-border-hover">
                                         <div className="flex items-center space-x-2 mb-1.5 sm:mb-2">
@@ -1136,7 +1136,7 @@ const WebTerminal = () => {
                             </div>
                             <div className="grid grid-cols-2 gap-3 sm:gap-4 mt-4 sm:mt-6">
                                 <button
-                                    onClick={() => executeTrade('BUY')}
+                                    onClick={() => executeTrade(0)}
                                     className="h-9 sm:h-10 md:h-12 bg-magic-success/10 hover:bg-magic-success/20 text-magic-success rounded-lg
                                              font-medium flex items-center justify-center gap-2 transition-all border border-magic-success/20
                                              hover:border-magic-success/40"
@@ -1145,7 +1145,7 @@ const WebTerminal = () => {
                                     <span className="text-sm sm:text-base">Buy Market</span>
                                 </button>
                                 <button
-                                    onClick={() => executeTrade('SELL')}
+                                    onClick={() => executeTrade(1)}
                                     className="h-9 sm:h-10 md:h-12 bg-magic-error/10 hover:bg-magic-error/20 text-magic-error rounded-lg
                                              font-medium flex items-center justify-center gap-2 transition-all border border-magic-error/20
                                              hover:border-magic-error/40"

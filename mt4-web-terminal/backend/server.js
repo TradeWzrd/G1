@@ -15,6 +15,23 @@ let pendingCommands = [];
 const historyRequests = new Map();
 const HISTORY_REQUEST_TIMEOUT = 30000; // 30 seconds
 
+// Store last known state
+let lastKnownState = {
+    account: {
+        balance: 0,
+        equity: 0,
+        margin: 0,
+        freeMargin: 0
+    },
+    positions: []
+};
+
+// Store trade history
+let tradeHistory = [];
+let lastUpdate = null;
+let eaConnected = false;
+let lastEAUpdate = null;
+
 // Clear timed out history requests
 setInterval(() => {
     const now = Date.now();
@@ -33,12 +50,6 @@ setInterval(() => {
         }
     }
 }, 10000);
-
-// Store trade history
-let tradeHistory = [];
-let lastUpdate = null;
-let eaConnected = false;
-let lastEAUpdate = null;
 
 // Use text parser instead of JSON parser for MT4 updates
 app.use(express.text());
@@ -222,10 +233,10 @@ app.post('/api/ea-data', (req, res) => {
 
         // Process account data
         const account = {
-            balance: parseFloat(balance),
-            equity: parseFloat(equity),
-            margin: parseFloat(margin),
-            freeMargin: parseFloat(freeMargin)
+            balance: parseFloat(balance) || lastKnownState.account.balance,
+            equity: parseFloat(equity) || lastKnownState.account.equity,
+            margin: parseFloat(margin) || lastKnownState.account.margin,
+            freeMargin: parseFloat(freeMargin) || lastKnownState.account.freeMargin
         };
 
         // Process positions
@@ -252,55 +263,36 @@ app.post('/api/ea-data', (req, res) => {
             }
         }
 
-        // Process history
-        if (historySection) {
-            const historyStrings = historySection.split(';');
-            historyStrings.forEach(hist => {
-                if (hist) {
-                    const [ticket, symbol, type, lots, openPrice, closePrice, openTime, closeTime, profit, commission, swap] = hist.split(',');
-                    const trade = {
-                        ticket: parseInt(ticket),
-                        symbol,
-                        type: parseInt(type),
-                        lots: parseFloat(lots),
-                        openPrice: parseFloat(openPrice),
-                        closePrice: parseFloat(closePrice),
-                        openTime: new Date(openTime),
-                        closeTime: new Date(closeTime),
-                        profit: parseFloat(profit),
-                        commission: parseFloat(commission),
-                        swap: parseFloat(swap),
-                        total: parseFloat(profit) + parseFloat(commission) + parseFloat(swap)
-                    };
-                    
-                    // Only add if not already in history
-                    if (!tradeHistory.find(t => t.ticket === trade.ticket)) {
-                        tradeHistory.push(trade);
-                    }
-                }
-            });
-        }
+        // Update last known state
+        lastKnownState = { 
+            account: { ...account }, 
+            positions: [...positions] 
+        };
 
-        // Update last update
-        lastUpdate = { account, positions };
+        // Update last update with new state
+        lastUpdate = lastKnownState;
         eaConnected = true;
         lastEAUpdate = Date.now();
 
         // Broadcast update to all connected clients
-        wss.clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({
-                    type: 'update',
-                    connected: true,
-                    data: lastUpdate
-                }));
-            }
+        broadcast({
+            type: 'update',
+            connected: true,
+            data: lastUpdate
         });
 
         res.json({ status: 'ok' });
     } catch (error) {
         console.error('Error processing EA data:', error);
-        res.status(500).json({ error: 'Error processing data' });
+        
+        // On error, broadcast last known state
+        broadcast({
+            type: 'update',
+            connected: true,
+            data: lastKnownState
+        });
+        
+        res.status(500).json({ error: error.message });
     }
 });
 
