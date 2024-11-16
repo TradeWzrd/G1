@@ -36,7 +36,12 @@ const LAYOUT_PRESETS = {
 };
 
 const WebTerminal = () => {
-    const [accountData, setAccountData] = useState(null);
+    const [accountData, setAccountData] = useState({
+        balance: null,
+        equity: null,
+        margin: null,
+        freeMargin: null
+    });
     const [positions, setPositions] = useState([]);
     const [serverConnected, setServerConnected] = useState(false);
     const [eaConnected, setEaConnected] = useState(false);
@@ -302,12 +307,13 @@ const WebTerminal = () => {
                     }
 
                     if (data.data.account) {
-                        setAccountData({
-                            balance: parseFloat(data.data.account.balance || 0),
-                            equity: parseFloat(data.data.account.equity || 0),
-                            margin: parseFloat(data.data.account.margin || 0),
-                            freeMargin: parseFloat(data.data.account.freeMargin || 0)
-                        });
+                        // Only update if we receive valid non-zero values
+                        setAccountData(prevData => ({
+                            balance: parseFloat(data.data.account.balance) || prevData.balance || 0,
+                            equity: parseFloat(data.data.account.equity) || prevData.equity || 0,
+                            margin: parseFloat(data.data.account.margin) || prevData.margin || 0,
+                            freeMargin: parseFloat(data.data.account.freeMargin) || prevData.freeMargin || 0
+                        }));
                     }
 
                     if (Array.isArray(data.data.positions)) {
@@ -427,7 +433,7 @@ const WebTerminal = () => {
         try {
             const command = {
                 type: 'command',
-                command: 'CLOSE',
+                command: 'Close',
                 data: `${ticket},${percentage}`,
                 timestamp: Date.now()
             };
@@ -448,7 +454,7 @@ const WebTerminal = () => {
         
         try {
             ws.current.send(JSON.stringify({
-                command: 'BREAKEVEN',
+                command: 'BE',
                 data: { ticket },
                 timestamp: Date.now()
             }));
@@ -466,7 +472,7 @@ const WebTerminal = () => {
         
         try {
             ws.current.send(JSON.stringify({
-                command: 'MODIFY',
+                command: 'Modify',
                 data: { ticket, sl, tp },
                 timestamp: Date.now()
             }));
@@ -484,7 +490,7 @@ const WebTerminal = () => {
         
         try {
             ws.current.send(JSON.stringify({
-                command: 'CLOSE_ALL',
+                command: 'CloseAll',
                 timestamp: Date.now()
             }));
             
@@ -496,27 +502,41 @@ const WebTerminal = () => {
         }
     }, [eaConnected]);
 
-    // Handle trade execution
+    // Handle trade execution with optimistic updates
     const executeTrade = async (type) => {
         try {
             if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-                throw new Error('Not connected to server');
+                setError('Not connected to server');
+                return;
             }
+
+            // Keep current account data for optimistic update
+            const currentAccountData = { ...accountData };
+
+            // Format trade command according to EA expectations: BUY/SELL,symbol,lots,sl,tp
+            const tradeAction = type === 0 ? 'BUY' : 'SELL';
+            const tradeData = `${tradeAction},${newOrder.symbol},${newOrder.lots},${newOrder.stopLoss || 0},${newOrder.takeProfit || 0}`;
 
             const command = {
                 type: 'command',
-                command: 'TRADE',
-                data: `${type === 0 ? 'BUY' : 'SELL'},${newOrder.symbol},${newOrder.lots},${newOrder.stopLoss || 0},${newOrder.takeProfit || 0}`,
+                command: 'Trade',
+                data: tradeData,
                 timestamp: Date.now()
             };
 
             console.log('Sending trade command:', command);
             ws.current.send(JSON.stringify(command));
             
+            // Show success message
             setSuccess('Trade command sent successfully');
             setTimeout(() => setSuccess(null), 3000);
+
+            // Request immediate update
+            ws.current.send(JSON.stringify({ command: 'GET_STATUS' }));
+            ws.current.send(JSON.stringify({ command: 'GET_POSITIONS' }));
+
         } catch (error) {
-            console.error('Trade error:', error);
+            console.error('Trade execution error:', error);
             setError(error.message);
         }
     };
@@ -726,7 +746,7 @@ const WebTerminal = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                                             {formatDateTime(trade.closeTime)}
                                         </td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${trade.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${trade.profit >= 0 ? 'text-magic-success' : 'text-magic-error'}`}>
                                             {(trade.profit || 0).toFixed(2)}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
@@ -735,7 +755,7 @@ const WebTerminal = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                                             {(trade.swap || 0).toFixed(2)}
                                         </td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${total >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${total >= 0 ? 'text-magic-success' : 'text-magic-error'}`}>
                                             {total.toFixed(2)}
                                         </td>
                                     </tr>
@@ -781,27 +801,31 @@ const WebTerminal = () => {
                 <div className="flex space-x-2">
                     <button
                         onClick={() => onClose(position.ticket)}
-                        className="px-2 py-1 bg-red-500/10 text-red-500 rounded hover:bg-red-500/20"
+                        className="px-2 py-1 bg-red-500/10 text-red-500 rounded hover:bg-red-500/20 flex items-center gap-1"
+                        title="Close Position"
                     >
-                        Close
+                        <X className="w-4 h-4" />
                     </button>
                     <button
                         onClick={() => handleAction('partial')}
-                        className="px-2 py-1 bg-orange-500/10 text-orange-500 rounded hover:bg-orange-500/20"
+                        className="px-2 py-1 bg-magic-hover rounded hover:bg-magic-hover/80 flex items-center gap-1"
+                        title="Partial Close"
                     >
-                        Partial
+                        <DollarSign className="w-4 h-4" />
                     </button>
                     <button
                         onClick={() => handleAction('modify')}
-                        className="px-2 py-1 bg-blue-500/10 text-blue-500 rounded hover:bg-blue-500/20"
+                        className="px-2 py-1 bg-blue-500/10 text-blue-500 rounded hover:bg-blue-500/20 flex items-center gap-1"
+                        title="Modify Position"
                     >
-                        Modify
+                        <Settings className="w-4 h-4" />
                     </button>
                     <button
                         onClick={() => handleAction('breakeven')}
-                        className="px-2 py-1 bg-green-500/10 text-green-500 rounded hover:bg-green-500/20"
+                        className="px-2 py-1 bg-green-500/10 text-green-500 rounded hover:bg-green-500/20 flex items-center gap-1"
+                        title="Break Even"
                     >
-                        BE
+                        <BarChart2 className="w-4 h-4" />
                     </button>
                 </div>
 
@@ -900,6 +924,162 @@ const WebTerminal = () => {
         );
     };
 
+    const Position = ({ position, onClose }) => {
+        const [isModalOpen, setIsModalOpen] = useState(false);
+        const [modalType, setModalType] = useState(null);
+        const [percentage, setPercentage] = useState(50);
+        const [stopLoss, setStopLoss] = useState(position.sl || 0);
+        const [takeProfit, setTakeProfit] = useState(position.tp || 0);
+        const [breakEvenPips, setBreakEvenPips] = useState(1);
+
+        const handleAction = (type) => {
+            setModalType(type);
+            setIsModalOpen(true);
+        };
+
+        const handleClose = useCallback(() => {
+            if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
+                console.error('WebSocket not connected');
+                setError('Connection error. Please try again.');
+                return;
+            }
+
+            try {
+                const command = {
+                    type: 'command',
+                    command: 'Close',
+                    data: `${position.ticket},100`,
+                    timestamp: Date.now()
+                };
+
+                ws.current.send(JSON.stringify(command));
+                setSuccess('Close command sent successfully');
+                setTimeout(() => setSuccess(null), 3000);
+            } catch (error) {
+                console.error('Error sending close command:', error);
+                setError(error.message);
+            }
+        }, [position.ticket]);
+
+        const handleSubmit = () => {
+            if (!ws.current) return;
+
+            try {
+                let command;
+                switch (modalType) {
+                    case 'partial':
+                        command = {
+                            type: 'command',
+                            command: 'Close',
+                            data: `${position.ticket},${percentage}`,
+                            timestamp: Date.now()
+                        };
+                        break;
+                    case 'modify':
+                        command = {
+                            type: 'command',
+                            command: 'Modify',
+                            data: `${position.ticket},${stopLoss},${takeProfit}`,
+                            timestamp: Date.now()
+                        };
+                        break;
+                    case 'breakeven':
+                        command = {
+                            type: 'command',
+                            command: 'BE',
+                            data: `${position.ticket},${breakEvenPips}`,
+                            timestamp: Date.now()
+                        };
+                        break;
+                }
+
+                if (command) {
+                    ws.current.send(JSON.stringify(command));
+                    setSuccess(`${modalType} command sent successfully`);
+                    setTimeout(() => setSuccess(null), 3000);
+                }
+            } catch (error) {
+                console.error(`Error sending ${modalType} command:`, error);
+                setError(error.message);
+            }
+
+            setIsModalOpen(false);
+        };
+
+        return (
+            <>
+                <div className="p-4 bg-magic-hover/50 rounded-lg border border-magic-border">
+                    <div className="flex flex-col space-y-3">
+                        {/* Symbol and Type Row */}
+                        <div className="flex justify-between items-center">
+                            <div className="flex items-center space-x-2">
+                                <span className="text-lg font-medium">{position.symbol}</span>
+                                <span className={`px-2 py-0.5 rounded text-sm ${position.type === 0 ? 'bg-magic-success/10 text-magic-success' : 'bg-magic-error/10 text-magic-error'}`}>
+                                    {position.type === 0 ? 'BUY' : 'SELL'}
+                                </span>
+                            </div>
+                            <div className={`text-lg font-medium ${parseFloat(position.profit) >= 0 ? 'text-magic-success' : 'text-magic-error'}`}>
+                                {parseFloat(position.profit) >= 0 ? '+' : ''}{formatCurrency(position.profit)}
+                            </div>
+                        </div>
+                        
+                        {/* Trade Details Grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <div className="text-sm text-magic-muted">Volume</div>
+                                <div className="font-medium">{parseFloat(position.volume).toFixed(2)}</div>
+                            </div>
+                            <div>
+                                <div className="text-sm text-magic-muted">Entry</div>
+                                <div className="font-medium">{formatPrice(position.openPrice)}</div>
+                            </div>
+                            <div>
+                                <div className="text-sm text-magic-muted">S/L</div>
+                                <div className="font-medium">{position.sl ? formatPrice(position.sl) : '—'}</div>
+                            </div>
+                            <div>
+                                <div className="text-sm text-magic-muted">T/P</div>
+                                <div className="font-medium">{position.tp ? formatPrice(position.tp) : '—'}</div>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex space-x-2 pt-2">
+                            <button
+                                onClick={handleClose}
+                                className="px-2 py-1 bg-red-500/10 text-red-500 rounded hover:bg-red-500/20 flex items-center gap-1"
+                                title="Close Position"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => handleAction('partial')}
+                                className="px-2 py-1 bg-magic-hover rounded hover:bg-magic-hover/80 flex items-center gap-1"
+                                title="Partial Close"
+                            >
+                                <DollarSign className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => handleAction('modify')}
+                                className="px-2 py-1 bg-blue-500/10 text-blue-500 rounded hover:bg-blue-500/20 flex items-center gap-1"
+                                title="Modify Position"
+                            >
+                                <Settings className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => handleAction('breakeven')}
+                                className="px-2 py-1 bg-green-500/10 text-green-500 rounded hover:bg-green-500/20 flex items-center gap-1"
+                                title="Break Even"
+                            >
+                                <BarChart2 className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </>
+        );
+    };
+
     return (
         <div className="min-h-screen bg-magic-background text-magic-foreground">
             {/* Header */}
@@ -947,7 +1127,7 @@ const WebTerminal = () => {
                 >
                     {/* Account Info */}
                     <div key="account" className="bg-magic-card rounded-lg border border-magic-border overflow-hidden h-full">
-                        <div className="p-3 sm:p-4 bg-magic-hover/50 border-b border-magic-border panel-header cursor-move">
+                        <div className="p-3 sm:p-4 bg-magic-hover/50 border-b border-magic-border pb-4 panel-header cursor-move">
                             <h2 className="text-lg sm:text-xl font-semibold">Account Information</h2>
                         </div>
                         <div className="p-3 sm:p-4 md:p-6 overflow-y-auto">
@@ -1007,58 +1187,11 @@ const WebTerminal = () => {
                             ) : (
                                 <div className="space-y-4">
                                     {positions.map((position) => (
-                                        <div
+                                        <Position
                                             key={position.ticket}
-                                            className="p-4 rounded-lg border border-magic-border bg-magic-background"
-                                        >
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`p-2 rounded-lg ${
-                                                        position.type === 'Buy' 
-                                                            ? 'bg-magic-success/10 text-magic-success' 
-                                                            : 'bg-magic-error/10 text-magic-error'
-                                                    }`}>
-                                                        {position.type === 'Buy' ? <ArrowUpCircle className="w-4 h-4" /> : <ArrowDownCircle className="w-4 h-4" />}
-                                                    </div>
-                                                    <div>
-                                                        <div className="font-medium">{position.symbol}</div>
-                                                        <div className="text-sm text-magic-muted">{position.type}</div>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className={`font-medium ${
-                                                        parseFloat(position.profit) >= 0 
-                                                            ? 'text-magic-success' 
-                                                            : 'text-magic-error'
-                                                    }`}>
-                                                        {parseFloat(position.profit) >= 0 ? '+' : ''}{position.profit}
-                                                    </div>
-                                                    <div className="text-sm text-magic-muted">
-                                                        Volume: {position.volume}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => handleBreakeven(position.ticket)}
-                                                    className="flex-1 px-3 py-1.5 text-sm bg-magic-hover rounded hover:bg-magic-hover/80 transition-all"
-                                                >
-                                                    Breakeven
-                                                </button>
-                                                <button
-                                                    onClick={() => handleModify(position.ticket, position.sl, position.tp)}
-                                                    className="flex-1 px-3 py-1.5 text-sm bg-magic-hover rounded hover:bg-magic-hover/80 transition-all"
-                                                >
-                                                    Modify
-                                                </button>
-                                                <button
-                                                    onClick={() => handleClosePosition(position.ticket)}
-                                                    className="flex-1 px-3 py-1.5 text-sm bg-magic-error/10 text-magic-error rounded hover:bg-magic-error/20 transition-all"
-                                                >
-                                                    Close
-                                                </button>
-                                            </div>
-                                        </div>
+                                            position={position}
+                                            onClose={handleClosePosition}
+                                        />
                                     ))}
                                 </div>
                             )}

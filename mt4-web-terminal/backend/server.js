@@ -18,12 +18,14 @@ const HISTORY_REQUEST_TIMEOUT = 30000; // 30 seconds
 // Store last known state
 let lastKnownState = {
     account: {
-        balance: 0,
-        equity: 0,
-        margin: 0,
-        freeMargin: 0
+        balance: null,
+        equity: null,
+        margin: null,
+        freeMargin: null
     },
-    positions: []
+    positions: [],
+    connected: false,
+    lastUpdateTime: null
 };
 
 // Store trade history
@@ -57,6 +59,18 @@ app.use(express.json());
 app.use(cors());
 app.use(morgan('dev'));
 
+// Function to validate and merge account data
+function validateAndMergeAccountData(newData) {
+    if (!newData || typeof newData !== 'object') return lastKnownState.account;
+
+    return {
+        balance: parseFloat(newData.balance) || lastKnownState.account.balance || 0,
+        equity: parseFloat(newData.equity) || lastKnownState.account.equity || 0,
+        margin: parseFloat(newData.margin) || lastKnownState.account.margin || 0,
+        freeMargin: parseFloat(newData.freeMargin) || lastKnownState.account.freeMargin || 0
+    };
+}
+
 // Function to parse incoming data
 function parseData(dataString) {
     try {
@@ -69,20 +83,24 @@ function parseData(dataString) {
         if (parts.length < 2) return null;
 
         const data = {
-            account: {},
-            positions: [],
-            history: []
+            account: { ...lastKnownState.account },
+            positions: [...lastKnownState.positions],
+            connected: true,
+            lastUpdateTime: Date.now()
         };
 
         // Parse account data
         if (parts[0] === 'ACCOUNT' && parts[1]) {
             const [balance, equity, margin, freeMargin] = parts[1].split(';');
-            data.account = {
+            const newAccountData = {
                 balance: parseFloat(balance),
                 equity: parseFloat(equity),
                 margin: parseFloat(margin),
                 freeMargin: parseFloat(freeMargin)
             };
+            
+            // Only update if we have valid non-zero values
+            data.account = validateAndMergeAccountData(newAccountData);
         }
 
         // Parse positions
@@ -103,10 +121,12 @@ function parseData(dataString) {
             });
         }
 
+        // Update last known state
+        lastKnownState = { ...data };
         return data;
     } catch (error) {
         console.error('Error parsing data:', error);
-        return null;
+        return lastKnownState; // Return last known state on error
     }
 }
 
@@ -181,7 +201,7 @@ app.post('/api/mt4/update', express.text(), (req, res) => {
         const data = parseData(req.body);
         
         if (data) {
-            lastUpdate = data;
+            lastKnownState = { ...data };
             eaConnected = true;
             lastEAUpdate = Date.now();
 
@@ -190,31 +210,40 @@ app.post('/api/mt4/update', express.text(), (req, res) => {
             pendingCommands.length = 0; // Clear the array without reassignment
             console.log('Sending pending commands to EA:', commands);
 
-            // Broadcast update to clients
+            // Broadcast update to clients with validated data
             broadcast({
                 type: 'update',
                 connected: true,
-                data: data
+                data: lastKnownState
             });
 
             // Send response with pending commands
             res.json({ 
-                success: true,
+                status: 'success',
                 commands: commands 
             });
         } else {
-            console.log('Invalid data format received from MT4');
+            // If parsing fails, send last known state
+            broadcast({
+                type: 'update',
+                connected: true,
+                data: lastKnownState
+            });
             res.json({ 
-                success: false,
-                error: 'Invalid data format'
+                status: 'error',
+                message: 'Failed to parse data',
+                commands: []
             });
         }
     } catch (error) {
-        console.error('Error processing update:', error);
-        res.json({ 
-            success: false,
-            error: error.message
+        console.error('Error processing MT4 update:', error);
+        // On error, still broadcast last known state
+        broadcast({
+            type: 'update',
+            connected: true,
+            data: lastKnownState
         });
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -522,28 +551,51 @@ wss.on('connection', (ws) => {
     clients.add(ws);
 
     // Send initial state
-    if (lastUpdate) {
+    if (lastKnownState) {
         ws.send(JSON.stringify({
             type: 'update',
             connected: eaConnected,
-            data: lastUpdate
+            data: lastKnownState
         }));
     }
 
-    // Handle incoming messages
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
             console.log('Received WebSocket message:', data);
 
-            if (data.type === 'command') {
-                processCommand(data);
+            if (data.command === 'TRADE') {
+                // Extract trade action and parameters from data
+                console.log('Processing trade command:', data);
+                pendingCommands.push(data.data);
+                
+                // Broadcast current state
+                broadcast({
+                    type: 'update',
+                    connected: eaConnected,
+                    data: lastKnownState
+                });
+            }
+            else if (data.command === 'GET_STATUS') {
+                // Send current state
+                ws.send(JSON.stringify({
+                    type: 'update',
+                    connected: eaConnected,
+                    data: lastKnownState
+                }));
+            }
+            else if (data.command === 'GET_POSITIONS') {
+                // Send current positions
+                ws.send(JSON.stringify({
+                    type: 'positions',
+                    data: lastKnownState.positions
+                }));
             }
         } catch (error) {
             console.error('Error processing WebSocket message:', error);
             ws.send(JSON.stringify({
                 type: 'error',
-                error: 'Invalid message format'
+                error: error.message
             }));
         }
     });
