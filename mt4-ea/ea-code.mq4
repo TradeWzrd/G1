@@ -119,6 +119,18 @@ void ProcessCommand(string rawCommand)
     // Skip if empty command
     if (StringLen(rawCommand) == 0) return;
     
+    // Check if the command is a JSON array
+    if (StringGetChar(rawCommand, 0) == '[') {
+        // Remove the brackets
+        string cleanCommand = StringSubstr(rawCommand, 1, StringLen(rawCommand) - 2);
+        // Remove quotes if present
+        if (StringGetChar(cleanCommand, 0) == '"') {
+            cleanCommand = StringSubstr(cleanCommand, 1, StringLen(cleanCommand) - 2);
+        }
+        ProcessSingleCommand(cleanCommand);
+        return;
+    }
+    
     // Extract command data from JSON format
     string type = ExtractValueFromJson(rawCommand, "type");
     string data = ExtractValueFromJson(rawCommand, "data");
