@@ -564,17 +564,16 @@ wss.on('connection', (ws) => {
             const data = JSON.parse(message);
             console.log('Received WebSocket message:', data);
 
-            if (data.command === 'TRADE') {
-                // Extract trade action and parameters from data
-                console.log('Processing trade command:', data);
+            if (data.type === 'command') {
+                // Process command and add to pending commands
+                console.log('Processing command:', data);
                 pendingCommands.push(data.data);
                 
-                // Broadcast current state
-                broadcast({
-                    type: 'update',
-                    connected: eaConnected,
-                    data: lastKnownState
-                });
+                // Broadcast command to EA
+                broadcast(JSON.stringify({
+                    success: true,
+                    commands: [data.data]
+                }));
             }
             else if (data.command === 'GET_STATUS') {
                 // Send current state
