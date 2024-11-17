@@ -321,7 +321,7 @@ const WebTerminal = () => {
             isConnecting.current = false;
             isInitialized.current = false; // Reset initialization on error
         }
-    }, [addToast, sendMessage, serverConnected, eaConnected]);
+    }, [addToast, serverConnected, eaConnected]);
 
     // WebSocket message handler
     const handleMessage = useCallback((event) => {
@@ -981,24 +981,13 @@ const WebTerminal = () => {
             }
         };
 
-        const handlePartialClose = async () => {
-            try {
-                if (!ws.current || !eaConnected) return;
-                
-                ws.current.send(JSON.stringify({
-                    command: 'PartialClose',
-                    ticket: position.ticket,
-                    volume: position.lots / 2, // Close half by default
-                    timestamp: Date.now()
-                }));
-                
-                setSuccess('Partial close command sent successfully');
-                setTimeout(() => setSuccess(null), 3000);
-            } catch (error) {
-                console.error('Partial close error:', error);
-                setError(error.message);
-            }
-        };
+        const handlePartialClose = useCallback(() => {
+            setPartialCloseDialog({
+                isOpen: true,
+                ticket: position.ticket,
+                percentage: 50
+            });
+        }, [position.ticket]);
 
         const handleClose = async () => {
             setIsClosing(true);
@@ -1383,6 +1372,32 @@ const WebTerminal = () => {
         }
     }, []);
 
+    const [partialCloseDialog, setPartialCloseDialog] = useState({
+        isOpen: false,
+        ticket: null,
+        percentage: 50  // Default to 50%
+    });
+
+    const handlePartialCloseConfirm = useCallback(() => {
+        if (!partialCloseDialog.ticket || !partialCloseDialog.percentage) return;
+
+        sendMessage({
+            command: 'PARTIAL',
+            data: `PARTIAL,${partialCloseDialog.ticket},${partialCloseDialog.percentage}`,
+            timestamp: Date.now()
+        }).then(() => {
+            addToast(`Partially closing position ${partialCloseDialog.ticket}`, 'info');
+        }).catch(error => {
+            addToast(`Failed to partially close position: ${error}`, 'error');
+        });
+
+        setPartialCloseDialog({ isOpen: false, ticket: null, percentage: 50 });
+    }, [partialCloseDialog, sendMessage, addToast]);
+
+    const handlePartialCloseCancel = useCallback(() => {
+        setPartialCloseDialog({ isOpen: false, ticket: null, percentage: 50 });
+    }, []);
+
     const renderTopBar = () => {
         return (
             <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: colors.border.light }}>
@@ -1651,6 +1666,46 @@ const WebTerminal = () => {
                                 {accountData?.freeMargin || '0.00'}
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderPartialCloseDialog = () => {
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-[#1a1f2e] rounded-lg p-6 w-96">
+                    <h3 className="text-lg font-semibold mb-4 text-white">Partial Close Position</h3>
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Close Percentage
+                        </label>
+                        <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={partialCloseDialog.percentage}
+                            onChange={(e) => setPartialCloseDialog(prev => ({
+                                ...prev,
+                                percentage: Math.min(100, Math.max(1, parseInt(e.target.value) || 1))
+                            }))}
+                            className="w-full px-3 py-2 bg-[#2a3441] border border-[#3a4451] rounded-md text-white"
+                        />
+                    </div>
+                    <div className="flex justify-end space-x-3">
+                        <button
+                            onClick={handlePartialCloseCancel}
+                            className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handlePartialCloseConfirm}
+                            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                        >
+                            Confirm
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1956,6 +2011,9 @@ const WebTerminal = () => {
                     </div>
                 </Draggable>
             )}
+
+            {/* Partial Close Dialog */}
+            {partialCloseDialog.isOpen && renderPartialCloseDialog()}
 
             {/* Toast Container */}
             <ToastContainer toasts={toasts} removeToast={removeToast} />
