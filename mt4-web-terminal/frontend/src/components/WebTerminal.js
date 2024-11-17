@@ -19,7 +19,8 @@ import {
     RefreshCw, 
     BarChart2, 
     AlertCircle, 
-    DragHandle
+    DragHandle,
+    Cog
 } from 'lucide-react';
 import { Button } from "./ui/button.jsx";
 import { ThemeToggle } from './ThemeToggle';
@@ -36,40 +37,48 @@ import { ToastContainer } from './Toast';
 // Layout presets with fixed dimensions and positions
 const LAYOUT_PRESETS = {
     default: {
-        description: 'Standard layout with full-width panels',
+        name: 'Default',
+        description: 'Standard layout with large chart and side panels',
         layout: [
-            { i: 'chart', x: 0, y: 0, w: 12, h: 16 },  // Increased height for chart
-            { i: 'account', x: 0, y: 16, w: 12, h: 4 },
-            { i: 'positions', x: 0, y: 20, w: 12, h: 8 },
-            { i: 'orders', x: 0, y: 28, w: 12, h: 8 }
+            { i: "chart", x: 0, y: 5, w: 8, h: 17 },
+            { i: "account", x: 0, y: 0, w: 8, h: 5 },
+            { i: "positions", x: 8, y: 9, w: 4, h: 13 },
+            { i: "orders", x: 8, y: 0, w: 4, h: 9 }
         ]
     },
     compact: {
-        description: 'Compact layout with side-by-side panels',
+        name: 'Compact',
+        description: 'Compact layout with equal panel sizes',
         layout: [
-            { i: 'chart', x: 0, y: 0, w: 12, h: 16 },  // Increased height for chart
-            { i: 'account', x: 0, y: 16, w: 12, h: 4 },
-            { i: 'positions', x: 0, y: 20, w: 6, h: 8 },
-            { i: 'orders', x: 6, y: 20, w: 6, h: 8 }
+            { i: "chart", x: 0, y: 0, w: 12, h: 12 },
+            { i: "account", x: 0, y: 12, w: 4, h: 8 },
+            { i: "positions", x: 4, y: 12, w: 4, h: 8 },
+            { i: "orders", x: 8, y: 12, w: 4, h: 8 }
         ]
     },
     wide: {
-        description: 'Wide layout with emphasis on trading panels',
+        name: 'Wide Chart',
+        description: 'Full-width chart with stacked panels',
         layout: [
-            { i: 'chart', x: 0, y: 0, w: 12, h: 16 },  // Increased height for chart
-            { i: 'account', x: 0, y: 16, w: 12, h: 4 },
-            { i: 'positions', x: 0, y: 20, w: 8, h: 8 },
-            { i: 'orders', x: 8, y: 20, w: 4, h: 8 }
+            { i: "chart", x: 0, y: 0, w: 12, h: 14 },
+            { i: "account", x: 0, y: 14, w: 12, h: 4 },
+            { i: "positions", x: 0, y: 18, w: 6, h: 8 },
+            { i: "orders", x: 6, y: 18, w: 6, h: 8 }
+        ]
+    },
+    trading: {
+        name: 'Trading Focus',
+        description: 'Optimized for active trading with larger positions panel',
+        layout: [
+            { i: "chart", x: 0, y: 0, w: 8, h: 14 },
+            { i: "account", x: 8, y: 0, w: 4, h: 6 },
+            { i: "positions", x: 8, y: 6, w: 4, h: 10 },
+            { i: "orders", x: 0, y: 14, w: 12, h: 6 }
         ]
     }
 };
 
-const DEFAULT_LAYOUT = [
-    { i: "chart", x: 0, y: 5, w: 8, h: 17 },
-    { i: "account", x: 0, y: 0, w: 8, h: 5 },
-    { i: "positions", x: 8, y: 9, w: 4, h: 13 },
-    { i: "orders", x: 8, y: 0, w: 4, h: 9 }
-];
+const DEFAULT_LAYOUT = LAYOUT_PRESETS.default.layout;
 
 const WebTerminal = () => {
     const [accountData, setAccountData] = useState({
@@ -1368,7 +1377,7 @@ const WebTerminal = () => {
                             color: colors.text.muted 
                         }}
                     >
-                        <Settings className="w-5 h-5" />
+                        <Pencil className="w-5 h-5" />
                     </button>
                 </div>
             </div>
@@ -1461,111 +1470,69 @@ const WebTerminal = () => {
             <Dialog
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
-                title="Settings"
+                title="Styling"
                 className="w-[480px]"
             >
                 <div className="space-y-6">
-                    {/* Connection Settings */}
-                    <div className="space-y-4">
-                        <h3 className="text-lg font-medium" style={{ color: colors.text.primary }}>Connection</h3>
+                    {/* Layout Section */}
+                    <div>
+                        <h3 className="text-sm font-medium mb-2 text-white/80">Layout</h3>
                         <div className="space-y-2">
-                            <label className="block text-sm" style={{ color: colors.text.muted }}>
-                                Server Address
-                            </label>
-                            <input
-                                type="text"
-                                value={serverAddress}
-                                onChange={(e) => setServerAddress(e.target.value)}
-                                className="w-full px-3 py-2 rounded-lg transition-colors duration-200"
-                                style={{ 
-                                    backgroundColor: colors.background.secondary,
-                                    borderColor: colors.border.light,
-                                    borderWidth: '1px',
-                                    color: colors.text.primary
-                                }}
-                                placeholder="localhost:8080"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Trading Settings */}
-                    <div className="space-y-4">
-                        <h3 className="text-lg font-medium" style={{ color: colors.text.primary }}>Trading</h3>
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <label className="block text-sm" style={{ color: colors.text.muted }}>
-                                    Default Lot Size
-                                </label>
-                                <input
-                                    type="number"
-                                    value={defaultLotSize}
-                                    onChange={(e) => setDefaultLotSize(parseFloat(e.target.value))}
-                                    step="0.01"
-                                    min="0.01"
-                                    className="w-full px-3 py-2 rounded-lg transition-colors duration-200"
-                                    style={{ 
-                                        backgroundColor: colors.background.secondary,
-                                        borderColor: colors.border.light,
-                                        borderWidth: '1px',
-                                        color: colors.text.primary
-                                    }}
-                                />
+                            {/* Layout Presets */}
+                            <div className="grid grid-cols-2 gap-2 mb-3">
+                                {Object.entries(LAYOUT_PRESETS).map(([key, preset]) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => {
+                                            setLayoutState({ currentLayout: preset.layout });
+                                            localStorage.setItem('layoutSettings', JSON.stringify(preset.layout));
+                                        }}
+                                        className="p-3 rounded-lg border border-[#3B82F6]/20 text-white/80 hover:bg-[#3B82F6]/10 transition-all text-left"
+                                    >
+                                        <div className="text-sm font-medium">{preset.name}</div>
+                                        <div className="text-xs text-white/50 mt-1">{preset.description}</div>
+                                    </button>
+                                ))}
                             </div>
-                            <div className="space-y-2">
-                                <label className="block text-sm" style={{ color: colors.text.muted }}>
-                                    Risk Percentage
-                                </label>
-                                <input
-                                    type="number"
-                                    value={riskPercentage}
-                                    onChange={(e) => setRiskPercentage(parseFloat(e.target.value))}
-                                    step="0.1"
-                                    min="0"
-                                    max="100"
-                                    className="w-full px-3 py-2 rounded-lg transition-colors duration-200"
-                                    style={{ 
-                                        backgroundColor: colors.background.secondary,
-                                        borderColor: colors.border.light,
-                                        borderWidth: '1px',
-                                        color: colors.text.primary
-                                    }}
-                                />
-                            </div>
+                            
+                            {/* Edit Layout Button */}
+                            <button
+                                onClick={() => setIsEditing(!isEditing)}
+                                className={`w-full px-4 py-2 rounded-lg border transition-all ${
+                                    isEditing
+                                        ? 'border-[#10B981] bg-[#10B981]/10 text-[#10B981]'
+                                        : 'border-[#3B82F6]/20 text-white/80 hover:bg-[#3B82F6]/10'
+                                }`}
+                            >
+                                {isEditing ? 'Finish Editing' : 'Edit Layout'}
+                            </button>
+                            {isEditing && (
+                                <div className="space-y-2">
+                                    <button
+                                        onClick={saveLayout}
+                                        className="w-full px-4 py-2 rounded-lg bg-[#10B981] hover:bg-[#10B981]/90 text-white transition-all"
+                                    >
+                                        Save Layout
+                                    </button>
+                                    <button
+                                        onClick={resetLayout}
+                                        className="w-full px-4 py-2 rounded-lg border border-red-500 text-red-500 hover:bg-red-500/10 transition-all"
+                                    >
+                                        Reset to Default
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
 
-                    {/* Theme Settings */}
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-medium" style={{ color: colors.text.primary }}>Theme</h3>
-                            <ThemeToggle />
-                        </div>
-                        <ThemeCustomizer />
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex justify-end space-x-3 pt-4 border-t" style={{ borderColor: colors.border.light }}>
+                    {/* Theme Section */}
+                    <div>
+                        <h3 className="text-sm font-medium mb-2 text-white/80">Theme</h3>
                         <button
-                            onClick={() => setIsSettingsOpen(false)}
-                            className="px-4 py-2 rounded-lg text-sm transition-colors duration-200"
-                            style={{ 
-                                backgroundColor: colors.background.hover,
-                                color: colors.text.primary,
-                                borderColor: colors.border.light,
-                                borderWidth: '1px'
-                            }}
+                            onClick={toggleTheme}
+                            className="w-full px-4 py-2 rounded-lg border border-[#3B82F6]/20 text-white/80 hover:bg-[#3B82F6]/10 transition-all"
                         >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={handleSaveSettings}
-                            className="px-4 py-2 rounded-lg text-sm transition-colors duration-200"
-                            style={{ 
-                                backgroundColor: colors.status.success.base,
-                                color: colors.text.inverse
-                            }}
-                        >
-                            Save Changes
+                            {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
                         </button>
                     </div>
                 </div>
@@ -1860,35 +1827,57 @@ const WebTerminal = () => {
                 >
                     <div className="fixed z-[9999] shadow-2xl">
                         <div className="w-[320px] bg-magic-background border border-magic-border rounded-lg overflow-hidden">
-                            <div className="p-4 border-b border-magic-border flex justify-between items-center drag-handle cursor-move select-none">
+                            <div className="p-4 border-b border-magic-border flex justify-between items-center drag-handle cursor-move select-none"
+                                style={{ 
+                                    background: 'linear-gradient(to right, #10B981, #3B82F6)',
+                                    borderColor: 'rgba(255, 255, 255, 0.1)'
+                                }}>
                                 <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded-full bg-magic-accent/50" />
-                                    <h2 className="text-lg font-semibold">Settings</h2>
+                                    <div className="w-3 h-3 rounded-full bg-white/50" />
+                                    <h2 className="text-lg font-semibold text-white">Styling</h2>
                                 </div>
                                 <button
                                     onClick={() => {
                                         setIsSettingsOpen(false);
                                         setSettingsPosition(calculateSettingsPosition());
                                     }}
-                                    className="p-2 rounded-lg hover:bg-magic-hover/50 transition-all"
+                                    className="p-2 rounded-lg hover:bg-white/10 transition-all"
                                 >
-                                    <X className="w-5 h-5" />
+                                    <X className="w-5 h-5 text-white" />
                                 </button>
                             </div>
 
-                            <div className="p-4">
+                            <div className="p-4" style={{ backgroundColor: '#12131A' }}>
                                 <div className="space-y-4">
                                     {/* Layout Section */}
                                     <div>
-                                        <h3 className="text-sm font-medium mb-2">Layout</h3>
+                                        <h3 className="text-sm font-medium mb-2 text-white/80">Layout</h3>
                                         <div className="space-y-2">
+                                            {/* Layout Presets */}
+                                            <div className="grid grid-cols-2 gap-2 mb-3">
+                                                {Object.entries(LAYOUT_PRESETS).map(([key, preset]) => (
+                                                    <button
+                                                        key={key}
+                                                        onClick={() => {
+                                                            setLayoutState({ currentLayout: preset.layout });
+                                                            localStorage.setItem('layoutSettings', JSON.stringify(preset.layout));
+                                                        }}
+                                                        className="p-3 rounded-lg border border-[#3B82F6]/20 text-white/80 hover:bg-[#3B82F6]/10 transition-all text-left"
+                                                    >
+                                                        <div className="text-sm font-medium">{preset.name}</div>
+                                                        <div className="text-xs text-white/50 mt-1">{preset.description}</div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            
+                                            {/* Edit Layout Button */}
                                             <button
                                                 onClick={() => setIsEditing(!isEditing)}
-                                                className={`w-full px-4 py-2 rounded-lg border ${
+                                                className={`w-full px-4 py-2 rounded-lg border transition-all ${
                                                     isEditing
-                                                        ? 'border-magic-accent bg-magic-accent/10 text-magic-accent'
-                                                        : 'border-magic-border hover:bg-magic-hover/50'
-                                                } transition-all`}
+                                                        ? 'border-[#10B981] bg-[#10B981]/10 text-[#10B981]'
+                                                        : 'border-[#3B82F6]/20 text-white/80 hover:bg-[#3B82F6]/10'
+                                                }`}
                                             >
                                                 {isEditing ? 'Finish Editing' : 'Edit Layout'}
                                             </button>
@@ -1896,13 +1885,13 @@ const WebTerminal = () => {
                                                 <div className="space-y-2">
                                                     <button
                                                         onClick={saveLayout}
-                                                        className="w-full px-4 py-2 rounded-lg bg-magic-accent hover:bg-magic-accent/90 transition-all"
+                                                        className="w-full px-4 py-2 rounded-lg bg-[#10B981] hover:bg-[#10B981]/90 text-white transition-all"
                                                     >
                                                         Save Layout
                                                     </button>
                                                     <button
                                                         onClick={resetLayout}
-                                                        className="w-full px-4 py-2 rounded-lg border border-magic-error text-magic-error hover:bg-magic-error/10 transition-all"
+                                                        className="w-full px-4 py-2 rounded-lg border border-red-500 text-red-500 hover:bg-red-500/10 transition-all"
                                                     >
                                                         Reset to Default
                                                     </button>
@@ -1913,10 +1902,10 @@ const WebTerminal = () => {
 
                                     {/* Theme Section */}
                                     <div>
-                                        <h3 className="text-sm font-medium mb-2">Theme</h3>
+                                        <h3 className="text-sm font-medium mb-2 text-white/80">Theme</h3>
                                         <button
                                             onClick={toggleTheme}
-                                            className="w-full px-4 py-2 rounded-lg border border-magic-border hover:bg-magic-hover/50 transition-all"
+                                            className="w-full px-4 py-2 rounded-lg border border-[#3B82F6]/20 text-white/80 hover:bg-[#3B82F6]/10 transition-all"
                                         >
                                             {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
                                         </button>

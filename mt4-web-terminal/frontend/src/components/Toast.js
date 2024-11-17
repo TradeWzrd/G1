@@ -8,31 +8,31 @@ const getToastStyles = (type) => {
     switch (type) {
         case 'success':
             return {
-                background: 'rgba(19, 41, 61, 0.95)',
+                background: '#1A1B23',
                 text: '#fff',
-                progressColor: '#089981',
-                icon: <CheckCircle className="w-5 h-5 text-[#089981]" />
+                progressColor: '#10B981',
+                icon: <CheckCircle className="w-5 h-5 text-[#10B981]" />
             };
         case 'error':
             return {
-                background: 'rgba(19, 41, 61, 0.95)',
+                background: '#1A1B23',
                 text: '#fff',
-                progressColor: '#f23645',
-                icon: <AlertCircle className="w-5 h-5 text-[#f23645]" />
+                progressColor: '#EF4444',
+                icon: <AlertCircle className="w-5 h-5 text-[#EF4444]" />
             };
         case 'warning':
             return {
-                background: 'rgba(19, 41, 61, 0.95)',
+                background: '#1A1B23',
                 text: '#fff',
-                progressColor: '#ff9800',
-                icon: <AlertTriangle className="w-5 h-5 text-[#ff9800]" />
+                progressColor: '#F59E0B',
+                icon: <AlertTriangle className="w-5 h-5 text-[#F59E0B]" />
             };
         default:
             return {
-                background: 'rgba(19, 41, 61, 0.95)',
+                background: '#1A1B23',
                 text: '#fff',
-                progressColor: '#2962ff',
-                icon: <AlertCircle className="w-5 h-5 text-[#2962ff]" />
+                progressColor: '#3B82F6',
+                icon: <AlertCircle className="w-5 h-5 text-[#3B82F6]" />
             };
     }
 };
