@@ -321,7 +321,7 @@ const WebTerminal = () => {
             isConnecting.current = false;
             isInitialized.current = false; // Reset initialization on error
         }
-    }, [addToast, cleanup, sendMessage, serverConnected, eaConnected]);
+    }, [addToast, sendMessage, serverConnected, eaConnected]);
 
     // WebSocket message handler
     const handleMessage = useCallback((event) => {
@@ -541,58 +541,88 @@ const WebTerminal = () => {
     // Action handlers
     const handleClosePosition = useCallback(async (ticket, percentage = 100) => {
         try {
-            await sendMessage({
-                command: 'ClosePosition',
-                ticket,
-                percentage,
+            if (!ws.current || !eaConnected) {
+                throw new Error('Not connected to server');
+            }
+
+            // The EA expects a CSV format: CLOSE,ticket,percentage
+            const command = `CLOSE,${ticket},${percentage}`;
+            
+            ws.current.send(JSON.stringify({
+                data: command,
                 timestamp: Date.now()
-            });
+            }));
+            
             addToast('Position close request sent', 'info');
         } catch (error) {
-            addToast('Failed to close position', 'error');
+            console.error('Close position error:', error);
+            addToast('Failed to close position: ' + error.message, 'error');
         }
-    }, [addToast, sendMessage]);
+    }, [addToast, eaConnected]);
 
     const handleCloseAll = useCallback(async () => {
         try {
-            await sendMessage({
-                command: 'CloseAll',
-                timestamp: Date.now()
+            if (!ws.current || !eaConnected) {
+                throw new Error('Not connected to server');
+            }
+
+            // Send close command for each open position
+            positions.forEach(position => {
+                const command = `CLOSE,${position.ticket},100`;
+                ws.current.send(JSON.stringify({
+                    data: command,
+                    timestamp: Date.now()
+                }));
             });
+            
             addToast('Close all positions request sent', 'info');
         } catch (error) {
-            addToast('Failed to close all positions', 'error');
+            console.error('Close all positions error:', error);
+            addToast('Failed to close all positions: ' + error.message, 'error');
         }
-    }, [addToast, sendMessage]);
+    }, [addToast, eaConnected, positions]);
 
     const handleBreakEven = useCallback(async (ticket) => {
         try {
-            await sendMessage({
-                command: 'BreakEven',
-                ticket,
+            if (!ws.current || !eaConnected) {
+                throw new Error('Not connected to server');
+            }
+
+            // The EA expects a CSV format: BE,ticket
+            const command = `BE,${ticket}`;
+            
+            ws.current.send(JSON.stringify({
+                data: command,
                 timestamp: Date.now()
-            });
+            }));
+            
             addToast('Break even request sent', 'info');
         } catch (error) {
-            addToast('Failed to set break even', 'error');
+            console.error('Break even error:', error);
+            addToast('Failed to set break even: ' + error.message, 'error');
         }
-    }, [addToast, sendMessage]);
+    }, [addToast, eaConnected]);
 
     const handleModify = useCallback(async (ticket, sl, tp) => {
         try {
-            await sendMessage({
-                command: 'ModifyPosition',
-                ticket,
-                sl,
-                tp,
+            if (!ws.current || !eaConnected) {
+                throw new Error('Not connected to server');
+            }
+
+            // The EA expects a CSV format: MODIFY,ticket,sl,tp
+            const command = `MODIFY,${ticket},${sl},${tp}`;
+            
+            ws.current.send(JSON.stringify({
+                data: command,
                 timestamp: Date.now()
-            });
-            setIsModifying(false);
+            }));
+            
             addToast('Position modify request sent', 'info');
         } catch (error) {
-            addToast('Failed to modify position', 'error');
+            console.error('Modify position error:', error);
+            addToast('Failed to modify position: ' + error.message, 'error');
         }
-    }, [addToast, sendMessage]);
+    }, [addToast, eaConnected]);
 
     // Initialize WebSocket connection
     useEffect(() => {

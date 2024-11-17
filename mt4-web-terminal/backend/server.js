@@ -578,15 +578,15 @@ wss.on('connection', (ws) => {
             const data = JSON.parse(message);
             console.log('Received WebSocket message:', data);
 
-            if (data.type === 'command') {
+            if (data.data) {
                 // Process command and add to pending commands
                 console.log('Processing command:', data);
                 pendingCommands.push(data.data);
                 
                 // Broadcast command to EA
                 broadcast(JSON.stringify({
-                    success: true,
-                    commands: [data.data]
+                    type: 'command',
+                    commands: pendingCommands
                 }));
             }
             else if (data.command === 'GET_STATUS') {
