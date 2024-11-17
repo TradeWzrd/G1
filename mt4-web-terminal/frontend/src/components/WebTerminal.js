@@ -96,23 +96,55 @@ const WebTerminal = () => {
     
     // Add toast state
     const [toasts, setToasts] = useState([]);
-    const [hasShownConnectedToast, setHasShownConnectedToast] = useState(false);
-
-    const addToast = useCallback((message, type = 'info') => {
-        const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        setToasts(prev => [...prev, { id, message, type }]);
-    }, []);
+    const toastTimeoutsRef = React.useRef(new Map());
+    const eaConnectingToastRef = React.useRef(null);
 
     const removeToast = useCallback((id) => {
+        if (toastTimeoutsRef.current.has(id)) {
+            clearTimeout(toastTimeoutsRef.current.get(id));
+            toastTimeoutsRef.current.delete(id);
+        }
+        if (eaConnectingToastRef.current === id) {
+            eaConnectingToastRef.current = null;
+        }
         setToasts(prev => prev.filter(toast => toast.id !== id));
     }, []);
 
-    // Reset connection toast flag when disconnected
-    useEffect(() => {
-        if (!serverConnected || !eaConnected) {
-            setHasShownConnectedToast(false);
+    const addToast = useCallback((message, type = 'info') => {
+        const id = Date.now();
+        
+        // Handle EA connection toast
+        if (message === 'Trying to connect to EA') {
+            if (eaConnectingToastRef.current) {
+                removeToast(eaConnectingToastRef.current);
+            }
+            eaConnectingToastRef.current = id;
         }
-    }, [serverConnected, eaConnected]);
+        
+        // Remove any existing toasts with the same message
+        setToasts(prev => {
+            const filtered = prev.filter(t => t.message !== message);
+            return [...filtered, { id, message, type }];
+        });
+
+        // Set a timeout to remove the toast
+        const timeout = setTimeout(() => removeToast(id), 3300);
+        toastTimeoutsRef.current.set(id, timeout);
+
+        return id;
+    }, [removeToast]);
+
+    // Cleanup all toasts on unmount
+    useEffect(() => {
+        return () => {
+            toastTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
+            toastTimeoutsRef.current.clear();
+            if (eaConnectingToastRef.current) {
+                removeToast(eaConnectingToastRef.current);
+                eaConnectingToastRef.current = null;
+            }
+        };
+    }, [removeToast]);
 
     // WebSocket reference and reconnection settings
     const ws = React.useRef(null);
@@ -175,7 +207,7 @@ const WebTerminal = () => {
         try {
             cleanup();
             isConnecting.current = true;
-            addToast('Trying to connect to server', 'info');
+            const connectingToast = addToast('Trying to connect to server', 'info');
 
             ws.current = new WebSocket('wss://g1-back.onrender.com');
 
@@ -191,6 +223,7 @@ const WebTerminal = () => {
                 setServerConnected(true);
                 setError(null);
                 reconnectAttempts.current = 0;
+                removeToast(connectingToast);
                 addToast('Connected to server', 'success');
 
                 if (!eaConnected) {
@@ -308,6 +341,10 @@ const WebTerminal = () => {
                     if (isConnected !== eaConnected) {  // Only update if status actually changed
                         setEaConnected(isConnected);
                         if (isConnected) {
+                            if (eaConnectingToastRef.current) {
+                                removeToast(eaConnectingToastRef.current);
+                                eaConnectingToastRef.current = null;
+                            }
                             addToast('Connected to MT4 Terminal', 'success');
                         }
                     }
@@ -318,6 +355,10 @@ const WebTerminal = () => {
                     if (typeof data.connected === 'boolean' && data.connected !== eaConnected) {
                         setEaConnected(data.connected);
                         if (data.connected) {
+                            if (eaConnectingToastRef.current) {
+                                removeToast(eaConnectingToastRef.current);
+                                eaConnectingToastRef.current = null;
+                            }
                             addToast('Connected to MT4 Terminal', 'success');
                         }
                     }
