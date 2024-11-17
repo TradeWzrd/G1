@@ -75,3 +75,190 @@
     opacity: 1;
     transform: scale(1.2);
 }
+
+.layout-edit-mode .react-grid-item {
+    transition: none !important;
+}
+
+.layout-edit-mode .react-grid-item.resizing {
+    z-index: 3;
+    opacity: 0.8;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+}
+
+.layout-edit-mode .react-grid-item.dragging {
+    z-index: 3;
+    opacity: 0.8;
+    cursor: grabbing;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle {
+    position: absolute;
+    background-repeat: no-repeat;
+    background-origin: content-box;
+    box-sizing: border-box;
+    background-position: center;
+    padding: 0;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.layout-edit-mode .react-grid-item:hover > .react-resizable-handle {
+    opacity: 1;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle::after {
+    content: "";
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(59, 130, 246, 0.5);
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-se {
+    width: 20px;
+    height: 20px;
+    right: 0;
+    bottom: 0;
+    cursor: se-resize;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-se::after {
+    right: 3px;
+    bottom: 3px;
+    border-right: 2px solid rgba(59, 130, 246, 0.5);
+    border-bottom: 2px solid rgba(59, 130, 246, 0.5);
+    border-top: none;
+    border-left: none;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-sw {
+    width: 20px;
+    height: 20px;
+    left: 0;
+    bottom: 0;
+    cursor: sw-resize;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-sw::after {
+    left: 3px;
+    bottom: 3px;
+    border-left: 2px solid rgba(59, 130, 246, 0.5);
+    border-bottom: 2px solid rgba(59, 130, 246, 0.5);
+    border-top: none;
+    border-right: none;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-ne {
+    width: 20px;
+    height: 20px;
+    right: 0;
+    top: 0;
+    cursor: ne-resize;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-ne::after {
+    right: 3px;
+    top: 3px;
+    border-right: 2px solid rgba(59, 130, 246, 0.5);
+    border-top: 2px solid rgba(59, 130, 246, 0.5);
+    border-bottom: none;
+    border-left: none;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-nw {
+    width: 20px;
+    height: 20px;
+    left: 0;
+    top: 0;
+    cursor: nw-resize;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-nw::after {
+    left: 3px;
+    top: 3px;
+    border-left: 2px solid rgba(59, 130, 246, 0.5);
+    border-top: 2px solid rgba(59, 130, 246, 0.5);
+    border-bottom: none;
+    border-right: none;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-n,
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-s {
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 20px;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-n {
+    top: 0;
+    cursor: n-resize;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-s {
+    bottom: 0;
+    cursor: s-resize;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-e,
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-w {
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-e {
+    right: 0;
+    cursor: e-resize;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-w {
+    left: 0;
+    cursor: w-resize;
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-n::after,
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-s::after {
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 2px;
+    background: rgba(59, 130, 246, 0.5);
+}
+
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-e::after,
+.layout-edit-mode .react-grid-item > .react-resizable-handle.react-resizable-handle-w::after {
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 20px;
+    background: rgba(59, 130, 246, 0.5);
+}
+
+.layout-edit-mode .react-grid-item.resizing > .react-resizable-handle::after {
+    border-color: rgba(59, 130, 246, 0.8);
+    background-color: rgba(59, 130, 246, 0.8);
+}
+
+.layout-edit-mode .panel-edit-mode {
+    user-select: none;
+}
+
+.layout-edit-mode .panel-edit-mode.resizing,
+.layout-edit-mode .panel-edit-mode.dragging {
+    opacity: 0.8;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+    z-index: 3;
+}
+
+.react-grid-item > .react-resizable-handle {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    bottom: 0;
+    right: 0;
+    cursor: se-resize;
+    z-index: 10;
+}

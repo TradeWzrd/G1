@@ -8,34 +8,46 @@ import { CustomLayout } from './CustomLayout';
 import { Dialog } from './Dialog';
 import SettingsPanel from './SettingsPanel';
 import '../styles/edit-mode.css';
+import Chart from './Chart';
+import Draggable from 'react-draggable';
 
 // Layout presets with fixed dimensions and positions
 const LAYOUT_PRESETS = {
     default: {
         description: 'Standard layout with full-width panels',
         layout: [
-            { i: 'account', x: 0, y: 0, w: 12, h: 4 },
-            { i: 'positions', x: 0, y: 4, w: 12, h: 8 },
-            { i: 'orders', x: 0, y: 12, w: 12, h: 8 }
+            { i: 'chart', x: 0, y: 0, w: 12, h: 16 },  // Increased height for chart
+            { i: 'account', x: 0, y: 16, w: 12, h: 4 },
+            { i: 'positions', x: 0, y: 20, w: 12, h: 8 },
+            { i: 'orders', x: 0, y: 28, w: 12, h: 8 }
         ]
     },
     compact: {
         description: 'Compact layout with side-by-side panels',
         layout: [
-            { i: 'account', x: 0, y: 0, w: 12, h: 4 },
-            { i: 'positions', x: 0, y: 4, w: 6, h: 8 },
-            { i: 'orders', x: 6, y: 4, w: 6, h: 8 }
+            { i: 'chart', x: 0, y: 0, w: 12, h: 16 },  // Increased height for chart
+            { i: 'account', x: 0, y: 16, w: 12, h: 4 },
+            { i: 'positions', x: 0, y: 20, w: 6, h: 8 },
+            { i: 'orders', x: 6, y: 20, w: 6, h: 8 }
         ]
     },
     wide: {
         description: 'Wide layout with emphasis on trading panels',
         layout: [
-            { i: 'account', x: 0, y: 0, w: 12, h: 4 },
-            { i: 'positions', x: 0, y: 4, w: 8, h: 8 },
-            { i: 'orders', x: 8, y: 4, w: 4, h: 8 }
+            { i: 'chart', x: 0, y: 0, w: 12, h: 16 },  // Increased height for chart
+            { i: 'account', x: 0, y: 16, w: 12, h: 4 },
+            { i: 'positions', x: 0, y: 20, w: 8, h: 8 },
+            { i: 'orders', x: 8, y: 20, w: 4, h: 8 }
         ]
     }
 };
+
+const DEFAULT_LAYOUT = [
+    { i: "chart", x: 0, y: 5, w: 8, h: 17 },
+    { i: "account", x: 0, y: 0, w: 8, h: 5 },
+    { i: "positions", x: 8, y: 9, w: 4, h: 13 },
+    { i: "orders", x: 8, y: 0, w: 4, h: 9 }
+];
 
 const WebTerminal = () => {
     const [accountData, setAccountData] = useState({
@@ -57,27 +69,13 @@ const WebTerminal = () => {
     // Load saved layout on component mount
     const [layoutState, setLayoutState] = useState(() => {
         try {
-            const savedPreset = localStorage.getItem('selectedPreset') || 'default';
-            const savedLayoutString = localStorage.getItem('layoutSettings');
-            const savedLayout = savedLayoutString ? JSON.parse(savedLayoutString) : LAYOUT_PRESETS[savedPreset].layout;
-
-            // Validate saved layout
-            if (!Array.isArray(savedLayout) || savedLayout.length === 0) {
-                throw new Error('Invalid saved layout');
-            }
-
+            const savedLayout = localStorage.getItem('layoutSettings');
             return {
-                selectedPreset: savedPreset,
-                currentLayout: savedLayout,
-                previewLayout: null
+                currentLayout: savedLayout ? JSON.parse(savedLayout) : DEFAULT_LAYOUT
             };
         } catch (error) {
             console.error('Error loading saved layout:', error);
-            return {
-                selectedPreset: 'default',
-                currentLayout: LAYOUT_PRESETS.default.layout,
-                previewLayout: null
-            };
+            return { currentLayout: DEFAULT_LAYOUT };
         }
     });
 
@@ -101,36 +99,36 @@ const WebTerminal = () => {
         }
 
         const newLayout = [...LAYOUT_PRESETS[preset].layout];
-        setLayoutState(prev => ({
-            ...prev,
-            selectedPreset: preset,
-            previewLayout: newLayout
-        }));
+        setLayoutState({ currentLayout: newLayout });
         setIsEditing(true);
     };
 
     // Handle layout changes during editing
     const handleLayoutChange = (newLayout) => {
-        if (!isEditing || !Array.isArray(newLayout)) return;
+        if (!isEditing) return;
 
-        const updatedLayout = newLayout.map(item => ({
-            i: item.i || '',
+        const validatedLayout = newLayout.map(item => ({
+            i: item.i,
             x: parseInt(item.x) || 0,
             y: parseInt(item.y) || 0,
-            w: parseInt(item.w) || 1,
-            h: parseInt(item.h) || 1
+            w: Math.max(parseInt(item.w) || 2, 2),
+            h: Math.max(parseInt(item.h) || 2, 2)
         }));
 
-        setLayoutState(prev => ({
-            ...prev,
-            previewLayout: updatedLayout
-        }));
+        setLayoutState({ currentLayout: validatedLayout });
+        
+        // Save immediately to localStorage
+        try {
+            localStorage.setItem('layoutSettings', JSON.stringify(validatedLayout));
+        } catch (error) {
+            console.error('Error saving layout:', error);
+        }
     };
 
     // Save layout changes
     const saveLayout = () => {
         try {
-            const layoutToSave = layoutState.previewLayout || layoutState.currentLayout;
+            const layoutToSave = layoutState.currentLayout;
             if (!layoutToSave || !Array.isArray(layoutToSave)) {
                 throw new Error('Invalid layout data');
             }
@@ -145,15 +143,7 @@ const WebTerminal = () => {
             }));
 
             // Save to localStorage
-            localStorage.setItem('selectedPreset', layoutState.selectedPreset);
             localStorage.setItem('layoutSettings', JSON.stringify(validatedLayout));
-
-            // Update state
-            setLayoutState({
-                selectedPreset: layoutState.selectedPreset,
-                currentLayout: validatedLayout,
-                previewLayout: null
-            });
 
             setIsEditing(false);
             setIsSettingsOpen(false);
@@ -165,17 +155,8 @@ const WebTerminal = () => {
     // Reset to default layout
     const resetLayout = () => {
         try {
-            const defaultLayout = [...LAYOUT_PRESETS.default.layout];
-            
-            localStorage.setItem('selectedPreset', 'default');
-            localStorage.setItem('layoutSettings', JSON.stringify(defaultLayout));
-            
-            setLayoutState({
-                selectedPreset: 'default',
-                currentLayout: defaultLayout,
-                previewLayout: null
-            });
-            
+            setLayoutState({ currentLayout: DEFAULT_LAYOUT });
+            localStorage.setItem('layoutSettings', JSON.stringify(DEFAULT_LAYOUT));
             setIsEditing(false);
             setIsSettingsOpen(false);
         } catch (error) {
@@ -185,10 +166,6 @@ const WebTerminal = () => {
 
     // Handle settings panel close
     const handleSettingsClose = () => {
-        setLayoutState(prev => ({
-            ...prev,
-            previewLayout: null
-        }));
         setIsEditing(false);
         setIsSettingsOpen(false);
     };
@@ -1012,7 +989,7 @@ const WebTerminal = () => {
 
         return (
             <>
-                <div className="p-4 bg-magic-hover/50 rounded-lg border border-magic-border overflow-hidden">
+                <div className="p-4 bg-magic-hover/50 rounded-lg border border-magic-border flex flex-col">
                     <div className="flex flex-col space-y-3">
                         {/* Symbol and Type Row */}
                         <div className="flex justify-between items-center">
@@ -1103,28 +1080,48 @@ const WebTerminal = () => {
         document.documentElement.classList.toggle('dark');
     };
 
+    const SETTINGS_PANEL_WIDTH = 320;
+    const SETTINGS_PANEL_MARGIN = 20;
+
+    const calculateSettingsPosition = () => ({
+        x: Math.max(SETTINGS_PANEL_MARGIN, window.innerWidth - SETTINGS_PANEL_WIDTH - SETTINGS_PANEL_MARGIN),
+        y: SETTINGS_PANEL_MARGIN
+    });
+
+    const [settingsPosition, setSettingsPosition] = useState(calculateSettingsPosition);
+
+    // Update settings position when window is resized
+    useEffect(() => {
+        const handleResize = () => {
+            if (isSettingsOpen) {
+                setSettingsPosition(calculateSettingsPosition());
+            }
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, [isSettingsOpen]);
+
     return (
-        <div className={`min-h-screen bg-[#0a0f1a] text-white relative ${
-            isEditing ? 'border-4 border-dashed border-blue-500/30 edit-mode-active select-none' : ''
-        }`}>
+        <div className="flex flex-col h-screen bg-magic-background text-white">
             {/* Header */}
-            <div className="sticky top-0 z-10 bg-[#0a0f1a] backdrop-blur-sm border-b border-magic-border">
-                <div className="container mx-auto px-4 py-3">
+            <header className="flex-none bg-magic-background/80 backdrop-blur-sm border-b border-magic-border">
+                <div className="px-4 py-3">
                     <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-4">
-                            <h1 className="text-2xl font-bold">MT4 Web Terminal</h1>
-                            <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-4 overflow-x-auto">
+                            <h1 className="text-xl font-bold whitespace-nowrap">MT4 Web Terminal</h1>
+                            <div className="flex items-center gap-2 whitespace-nowrap">
                                 <div className={`w-2 h-2 rounded-full ${serverConnected ? 'bg-magic-success' : 'bg-magic-error'}`} />
                                 <span className="text-sm font-medium">Server: {serverConnected ? 'Connected' : 'Disconnected'}</span>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 whitespace-nowrap">
                                 <div className={`w-2 h-2 rounded-full ${eaConnected ? 'bg-magic-success' : 'bg-magic-error'}`} />
                                 <span className="text-sm font-medium">EA: {eaConnected ? 'Connected' : 'Disconnected'}</span>
                             </div>
                         </div>
 
                         {/* Settings Button */}
-                        <div className="relative">
+                        <div className="flex-none">
                             <button
                                 onClick={toggleSettings}
                                 className={`p-2 rounded-lg hover:bg-magic-hover/50 transition-all ${
@@ -1136,64 +1133,85 @@ const WebTerminal = () => {
                         </div>
                     </div>
                 </div>
-            </div>
+            </header>
 
             {/* Main Content */}
-            <div className="container mx-auto px-4 py-4">
-                {/* Connection Status Dashboard */}
-                <div className="flex items-center gap-4 px-4 py-2 bg-magic-card border-b border-magic-border">
-                    <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${serverConnected ? 'bg-magic-success' : 'bg-magic-error'}`} />
-                        <span className="text-sm font-medium">Server: {serverConnected ? 'Connected' : 'Disconnected'}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${eaConnected ? 'bg-magic-success' : 'bg-magic-error'}`} />
-                        <span className="text-sm font-medium">EA: {eaConnected ? 'Connected' : 'Disconnected'}</span>
-                    </div>
-                </div>
-
+            <main className="flex-1 min-h-0 relative">
                 <CustomLayout
-                    layout={layoutState.previewLayout || layoutState.currentLayout}
+                    layout={layoutState.currentLayout}
                     onLayoutChange={handleLayoutChange}
                     isEditing={isEditing}
-                    className={`min-h-screen ${isEditing ? 'layout-edit-mode select-none' : ''}`}
+                    className={`h-full ${isEditing ? 'layout-edit-mode' : ''}`}
                 >
-                    {/* Account Info */}
-                    <div key="account" className={`bg-magic-hover/50 rounded-lg border border-magic-border overflow-hidden ${
-                        isEditing ? 'panel-edit-mode select-none' : ''
+                    {/* Chart */}
+                    <div key="chart" className={`bg-magic-hover/50 rounded-lg border border-magic-border flex flex-col ${
+                        isEditing ? 'panel-edit-mode' : ''
                     }`}>
                         <div className="panel-header p-4 bg-magic-hover/50 border-b border-magic-border flex justify-between items-center">
                             <h2 className="font-medium flex items-center gap-2">
                                 {isEditing && <div className="drag-handle w-6 h-6 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center cursor-move">⋮⋮</div>}
-                                Account Information
+                                Chart
                             </h2>
                         </div>
-                        <div className="p-3 sm:p-4 md:p-6 overflow-y-auto">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                                {accountData && Object.entries(accountData).map(([key, value]) => (
-                                    <div key={key} className="p-3 sm:p-4 rounded-lg bg-magic-hover/50 border border-magic-border transition-all hover:border-magic-border-hover">
-                                        <div className="flex items-center space-x-2 mb-1.5 sm:mb-2">
-                                            {key === 'balance' && <Wallet className="w-4 h-4 text-magic-primary" />}
-                                            {key === 'equity' && <Activity className="w-4 h-4 text-magic-success" />}
-                                            {key === 'margin' && <DollarSign className="w-4 h-4 text-magic-warning" />}
-                                            {key === 'freeMargin' && <RefreshCw className="w-4 h-4 text-magic-info" />}
-                                            <span className="text-magic-muted text-xs sm:text-sm font-medium">
-                                                {key.replace(/([A-Z])/g, ' $1').trim().charAt(0).toUpperCase() + 
-                                                 key.replace(/([A-Z])/g, ' $1').trim().slice(1)}
-                                            </span>
-                                        </div>
-                                        <div className="text-xl sm:text-2xl font-semibold tracking-tight">
-                                            {formatCurrency(value)}
-                                        </div>
+                        <div className="flex-1 min-h-0">
+                            <Chart 
+                                data={[
+                                    { time: '2023-01-01', open: 1.0500, high: 1.0550, low: 1.0480, close: 1.0520 },
+                                    { time: '2023-01-02', open: 1.0520, high: 1.0580, low: 1.0510, close: 1.0560 },
+                                    { time: '2023-01-03', open: 1.0560, high: 1.0600, low: 1.0540, close: 1.0590 },
+                                    { time: '2023-01-04', open: 1.0590, high: 1.0620, low: 1.0570, close: 1.0610 },
+                                    { time: '2023-01-05', open: 1.0610, high: 1.0650, low: 1.0590, close: 1.0640 }
+                                ]} 
+                                symbol="EURUSD" 
+                                timeframe="1H"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Account Information */}
+                    <div key="account" className={`bg-magic-hover/50 rounded-lg border border-magic-border ${
+                        isEditing ? 'panel-edit-mode' : ''
+                    }`}>
+                        <div className="panel-header p-4 bg-magic-hover/50 border-b border-magic-border flex justify-between items-center">
+                            <h2 className="font-medium flex items-center gap-2">Account Information</h2>
+                        </div>
+                        <div className="p-2 sm:p-3">
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+                                <div className="p-2 sm:p-3 rounded-lg bg-magic-hover/50 border border-magic-border transition-all hover:border-magic-border-hover">
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                        <Wallet className="w-4 h-4 text-magic-primary flex-shrink-0" />
+                                        <span className="text-magic-muted text-xs font-medium truncate">Balance</span>
                                     </div>
-                                ))}
+                                    <div className="text-base sm:text-lg font-semibold tracking-tight truncate">{accountData?.balance || '0.00'}</div>
+                                </div>
+                                <div className="p-2 sm:p-3 rounded-lg bg-magic-hover/50 border border-magic-border transition-all hover:border-magic-border-hover">
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                        <Activity className="w-4 h-4 text-magic-success flex-shrink-0" />
+                                        <span className="text-magic-muted text-xs font-medium truncate">Equity</span>
+                                    </div>
+                                    <div className="text-base sm:text-lg font-semibold tracking-tight truncate">{accountData?.equity || '0.00'}</div>
+                                </div>
+                                <div className="p-2 sm:p-3 rounded-lg bg-magic-hover/50 border border-magic-border transition-all hover:border-magic-border-hover">
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                        <DollarSign className="w-4 h-4 text-magic-warning flex-shrink-0" />
+                                        <span className="text-magic-muted text-xs font-medium truncate">Margin</span>
+                                    </div>
+                                    <div className="text-base sm:text-lg font-semibold tracking-tight truncate">{accountData?.margin || '0.00'}</div>
+                                </div>
+                                <div className="p-2 sm:p-3 rounded-lg bg-magic-hover/50 border border-magic-border transition-all hover:border-magic-border-hover">
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                        <RefreshCw className="w-4 h-4 text-magic-info flex-shrink-0" />
+                                        <span className="text-magic-muted text-xs font-medium truncate">Free Margin</span>
+                                    </div>
+                                    <div className="text-base sm:text-lg font-semibold tracking-tight truncate">{accountData?.freeMargin || '0.00'}</div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     {/* Positions */}
                     <div key="positions" className={`bg-magic-hover/50 rounded-lg border border-magic-border overflow-hidden flex flex-col h-full ${
-                        isEditing ? 'panel-edit-mode select-none' : ''
+                        isEditing ? 'panel-edit-mode' : ''
                     }`}>
                         <div className="panel-header p-4 bg-magic-hover/50 border-b border-magic-border flex justify-between items-center flex-shrink-0">
                             <h2 className="font-medium flex items-center gap-2">
@@ -1239,7 +1257,7 @@ const WebTerminal = () => {
 
                     {/* Orders */}
                     <div key="orders" className={`bg-magic-hover/50 rounded-lg border border-magic-border overflow-hidden flex flex-col h-full ${
-                        isEditing ? 'panel-edit-mode select-none' : ''
+                        isEditing ? 'panel-edit-mode' : ''
                     }`}>
                         <div className="panel-header p-4 bg-magic-hover/50 border-b border-magic-border flex justify-between items-center flex-shrink-0">
                             <h2 className="font-medium flex items-center gap-2">
@@ -1334,41 +1352,97 @@ const WebTerminal = () => {
                         </div>
                     </div>
                 </CustomLayout>
-            </div>
+            </main>
 
             {/* Settings Panel */}
-            <SettingsPanel
-                isOpen={isSettingsOpen}
-                onClose={() => setIsSettingsOpen(false)}
-                onToggleEditMode={toggleEditMode}
-                isEditing={isEditing}
-                onSaveLayout={saveLayout}
-                onResetLayout={resetLayout}
-                layoutPresets={LAYOUT_PRESETS}
-                selectedPreset={layoutState.selectedPreset}
-                onSelectPreset={handlePresetSelect}
-            />
+            {isSettingsOpen && (
+                <Draggable
+                    handle=".drag-handle"
+                    bounds="body"
+                    defaultPosition={settingsPosition}
+                    onStop={(e, data) => {
+                        // Ensure the panel stays within viewport bounds
+                        const x = Math.min(
+                            Math.max(SETTINGS_PANEL_MARGIN, data.x),
+                            window.innerWidth - SETTINGS_PANEL_WIDTH - SETTINGS_PANEL_MARGIN
+                        );
+                        const y = Math.max(SETTINGS_PANEL_MARGIN, data.y);
+                        setSettingsPosition({ x, y });
+                    }}
+                >
+                    <div className="fixed z-[9999] shadow-2xl">
+                        <div className="w-[320px] bg-magic-background border border-magic-border rounded-lg overflow-hidden">
+                            <div className="p-4 border-b border-magic-border flex justify-between items-center drag-handle cursor-move select-none">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-magic-accent/50" />
+                                    <h2 className="text-lg font-semibold">Settings</h2>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setIsSettingsOpen(false);
+                                        setSettingsPosition(calculateSettingsPosition());
+                                    }}
+                                    className="p-2 rounded-lg hover:bg-magic-hover/50 transition-all"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
 
-            {/* Save/Cancel Layout Buttons */}
+                            <div className="p-4">
+                                <div className="space-y-4">
+                                    {/* Layout Section */}
+                                    <div>
+                                        <h3 className="text-sm font-medium mb-2">Layout</h3>
+                                        <div className="space-y-2">
+                                            <button
+                                                onClick={() => setIsEditing(!isEditing)}
+                                                className={`w-full px-4 py-2 rounded-lg border ${
+                                                    isEditing
+                                                        ? 'border-magic-accent bg-magic-accent/10 text-magic-accent'
+                                                        : 'border-magic-border hover:bg-magic-hover/50'
+                                                } transition-all`}
+                                            >
+                                                {isEditing ? 'Finish Editing' : 'Edit Layout'}
+                                            </button>
+                                            {isEditing && (
+                                                <div className="space-y-2">
+                                                    <button
+                                                        onClick={saveLayout}
+                                                        className="w-full px-4 py-2 rounded-lg bg-magic-accent hover:bg-magic-accent/90 transition-all"
+                                                    >
+                                                        Save Layout
+                                                    </button>
+                                                    <button
+                                                        onClick={resetLayout}
+                                                        className="w-full px-4 py-2 rounded-lg border border-magic-error text-magic-error hover:bg-magic-error/10 transition-all"
+                                                    >
+                                                        Reset to Default
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Theme Section */}
+                                    <div>
+                                        <h3 className="text-sm font-medium mb-2">Theme</h3>
+                                        <button
+                                            onClick={toggleTheme}
+                                            className="w-full px-4 py-2 rounded-lg border border-magic-border hover:bg-magic-hover/50 transition-all"
+                                        >
+                                            {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </Draggable>
+            )}
+
+            {/* Edit Mode Indicator */}
             {isEditing && (
-                <div className="fixed bottom-4 right-4 flex items-center gap-2">
-                    <button
-                        onClick={handleSettingsClose}
-                        className="px-4 py-2 bg-magic-error/10 text-magic-error rounded-lg 
-                                hover:bg-magic-error/20 transition-all flex items-center justify-center gap-2"
-                    >
-                        <X className="w-4 h-4" />
-                        <span>Cancel</span>
-                    </button>
-                    <button
-                        onClick={saveLayout}
-                        className="px-4 py-2 bg-magic-success/10 text-magic-success rounded-lg 
-                                hover:bg-magic-success/20 transition-all flex items-center justify-center gap-2"
-                    >
-                        <Save className="w-4 h-4" />
-                        <span>Save Layout</span>
-                    </button>
-                </div>
+                <div className="fixed top-0 inset-x-0 h-1 bg-magic-accent animate-pulse z-[9998]" />
             )}
         </div>
     );
