@@ -14,10 +14,10 @@ const defaultLayouts = {
     ]
 };
 
-export const CustomLayout = ({ children, layout, onLayoutChange, isEditing }) => {
+export const CustomLayout = ({ children, layout, onLayoutChange, isEditing, className }) => {
     return (
         <ResponsiveGridLayout
-            className="layout"
+            className={`layout ${className || ''}`}
             layouts={{ lg: layout }}
             breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
             cols={{ lg: 12, md: 12, sm: 12, xs: 12, xxs: 12 }}

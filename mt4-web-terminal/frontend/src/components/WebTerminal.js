@@ -6,6 +6,8 @@ import { ThemeToggle } from './ThemeToggle';
 import ThemeCustomizer from './ThemeCustomizer';
 import { CustomLayout } from './CustomLayout';
 import { Dialog } from './Dialog';
+import SettingsPanel from './SettingsPanel';
+import '../styles/edit-mode.css';
 
 // Layout presets with fixed dimensions and positions
 const LAYOUT_PRESETS = {
@@ -47,8 +49,10 @@ const WebTerminal = () => {
     const [eaConnected, setEaConnected] = useState(false);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
-    const [showSettings, setShowSettings] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
+    const [theme, setTheme] = useState('dark');
+    const [isCustomizerOpen, setIsCustomizerOpen] = useState(false);
     
     // Load saved layout on component mount
     const [layoutState, setLayoutState] = useState(() => {
@@ -152,7 +156,7 @@ const WebTerminal = () => {
             });
 
             setIsEditing(false);
-            setShowSettings(false);
+            setIsSettingsOpen(false);
         } catch (error) {
             console.error('Error saving layout:', error);
         }
@@ -173,7 +177,7 @@ const WebTerminal = () => {
             });
             
             setIsEditing(false);
-            setShowSettings(false);
+            setIsSettingsOpen(false);
         } catch (error) {
             console.error('Error resetting layout:', error);
         }
@@ -186,7 +190,7 @@ const WebTerminal = () => {
             previewLayout: null
         }));
         setIsEditing(false);
-        setShowSettings(false);
+        setIsSettingsOpen(false);
     };
 
     // WebSocket reference and reconnection settings
@@ -1008,7 +1012,7 @@ const WebTerminal = () => {
 
         return (
             <>
-                <div className="p-4 bg-magic-hover/50 rounded-lg border border-magic-border">
+                <div className="p-4 bg-magic-hover/50 rounded-lg border border-magic-border overflow-hidden">
                     <div className="flex flex-col space-y-3">
                         {/* Symbol and Type Row */}
                         <div className="flex justify-between items-center">
@@ -1024,7 +1028,7 @@ const WebTerminal = () => {
                         </div>
                         
                         {/* Trade Details Grid */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                             <div>
                                 <div className="text-sm text-magic-muted">Volume</div>
                                 <div className="font-medium">{parseFloat(position.volume).toFixed(2)}</div>
@@ -1080,19 +1084,52 @@ const WebTerminal = () => {
         );
     };
 
+    // Toggle edit mode
+    const toggleEditMode = () => {
+        setIsEditing(!isEditing);
+        setIsSettingsOpen(false);
+    };
+
+    const toggleSettings = () => {
+        setIsSettingsOpen(!isSettingsOpen);
+        if (isEditing) {
+            setIsEditing(false);
+        }
+    };
+
+    const toggleTheme = () => {
+        const newTheme = theme === 'dark' ? 'light' : 'dark';
+        setTheme(newTheme);
+        document.documentElement.classList.toggle('dark');
+    };
+
     return (
-        <div className="min-h-screen bg-magic-background text-magic-foreground">
+        <div className={`min-h-screen bg-[#0a0f1a] text-white relative ${
+            isEditing ? 'border-4 border-dashed border-blue-500/30 edit-mode-active select-none' : ''
+        }`}>
             {/* Header */}
-            <div className="sticky top-0 z-10 bg-magic-background/95 backdrop-blur-sm border-b border-magic-border">
+            <div className="sticky top-0 z-10 bg-[#0a0f1a] backdrop-blur-sm border-b border-magic-border">
                 <div className="container mx-auto px-4 py-3">
                     <div className="flex justify-between items-center">
-                        <h1 className="text-2xl font-bold">MT4 Web Terminal</h1>
-                        <div className="flex items-center space-x-3">
-                            <ThemeCustomizer />
-                            <ThemeToggle />
+                        <div className="flex items-center gap-4">
+                            <h1 className="text-2xl font-bold">MT4 Web Terminal</h1>
+                            <div className="flex items-center gap-2">
+                                <div className={`w-2 h-2 rounded-full ${serverConnected ? 'bg-magic-success' : 'bg-magic-error'}`} />
+                                <span className="text-sm font-medium">Server: {serverConnected ? 'Connected' : 'Disconnected'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className={`w-2 h-2 rounded-full ${eaConnected ? 'bg-magic-success' : 'bg-magic-error'}`} />
+                                <span className="text-sm font-medium">EA: {eaConnected ? 'Connected' : 'Disconnected'}</span>
+                            </div>
+                        </div>
+
+                        {/* Settings Button */}
+                        <div className="relative">
                             <button
-                                onClick={() => setShowSettings(true)}
-                                className="p-2 hover:bg-magic-hover rounded-lg transition-colors"
+                                onClick={toggleSettings}
+                                className={`p-2 rounded-lg hover:bg-magic-hover/50 transition-all ${
+                                    isSettingsOpen ? 'bg-magic-hover/50' : ''
+                                }`}
                             >
                                 <Settings className="w-5 h-5" />
                             </button>
@@ -1117,18 +1154,19 @@ const WebTerminal = () => {
 
                 <CustomLayout
                     layout={layoutState.previewLayout || layoutState.currentLayout}
-                    isEditing={isEditing}
                     onLayoutChange={handleLayoutChange}
-                    draggableHandle=".panel-header"
-                    cols={12}
-                    rowHeight={60}
-                    margin={[16, 16]}
-                    containerPadding={[16, 16]}
+                    isEditing={isEditing}
+                    className={`min-h-screen ${isEditing ? 'layout-edit-mode select-none' : ''}`}
                 >
                     {/* Account Info */}
-                    <div key="account" className="bg-magic-card rounded-lg border border-magic-border overflow-hidden h-full">
-                        <div className="p-3 sm:p-4 bg-magic-hover/50 border-b border-magic-border pb-4 panel-header cursor-move">
-                            <h2 className="text-lg sm:text-xl font-semibold">Account Information</h2>
+                    <div key="account" className={`bg-magic-hover/50 rounded-lg border border-magic-border overflow-hidden ${
+                        isEditing ? 'panel-edit-mode select-none' : ''
+                    }`}>
+                        <div className="panel-header p-4 bg-magic-hover/50 border-b border-magic-border flex justify-between items-center">
+                            <h2 className="font-medium flex items-center gap-2">
+                                {isEditing && <div className="drag-handle w-6 h-6 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center cursor-move">⋮⋮</div>}
+                                Account Information
+                            </h2>
                         </div>
                         <div className="p-3 sm:p-4 md:p-6 overflow-y-auto">
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -1154,9 +1192,14 @@ const WebTerminal = () => {
                     </div>
 
                     {/* Positions */}
-                    <div key="positions" className="bg-magic-card rounded-lg border border-magic-border overflow-hidden h-full">
-                        <div className="p-3 sm:p-4 bg-magic-hover/50 border-b border-magic-border panel-header cursor-move flex justify-between items-center">
-                            <h2 className="text-lg sm:text-xl font-semibold">Open Trades</h2>
+                    <div key="positions" className={`bg-magic-hover/50 rounded-lg border border-magic-border overflow-hidden flex flex-col h-full ${
+                        isEditing ? 'panel-edit-mode select-none' : ''
+                    }`}>
+                        <div className="panel-header p-4 bg-magic-hover/50 border-b border-magic-border flex justify-between items-center flex-shrink-0">
+                            <h2 className="font-medium flex items-center gap-2">
+                                {isEditing && <div className="drag-handle w-6 h-6 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center cursor-move">⋮⋮</div>}
+                                Open Trades
+                            </h2>
                             {positions.length > 0 && eaConnected && (
                                 <button
                                     onClick={handleCloseAll}
@@ -1166,7 +1209,7 @@ const WebTerminal = () => {
                                 </button>
                             )}
                         </div>
-                        <div className="p-3 sm:p-4 overflow-y-auto">
+                        <div className="flex-1 overflow-y-auto p-4 min-h-0">
                             {!serverConnected ? (
                                 <div className="text-center text-magic-muted py-8">
                                     <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -1180,18 +1223,14 @@ const WebTerminal = () => {
                                     <p className="text-sm mt-1">Connect EA to view open trades</p>
                                 </div>
                             ) : positions.length === 0 ? (
-                                <div className="text-center text-magic-muted py-8">
-                                    <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                                    <p>No Open Trades</p>
+                                <div className="flex flex-col items-center justify-center text-magic-muted py-8">
+                                    <Package className="w-12 h-12 mb-2" />
+                                    <p>No open trades</p>
                                 </div>
                             ) : (
                                 <div className="space-y-4">
                                     {positions.map((position) => (
-                                        <Position
-                                            key={position.ticket}
-                                            position={position}
-                                            onClose={handleClosePosition}
-                                        />
+                                        <Position key={position.ticket} position={position} onClose={handleClosePosition} />
                                     ))}
                                 </div>
                             )}
@@ -1199,11 +1238,16 @@ const WebTerminal = () => {
                     </div>
 
                     {/* Orders */}
-                    <div key="orders" className="bg-magic-card rounded-lg border border-magic-border overflow-hidden h-full">
-                        <div className="p-3 sm:p-4 bg-magic-hover/50 border-b border-magic-border panel-header cursor-move">
-                            <h2 className="text-lg sm:text-xl font-semibold">New Order</h2>
+                    <div key="orders" className={`bg-magic-hover/50 rounded-lg border border-magic-border overflow-hidden flex flex-col h-full ${
+                        isEditing ? 'panel-edit-mode select-none' : ''
+                    }`}>
+                        <div className="panel-header p-4 bg-magic-hover/50 border-b border-magic-border flex justify-between items-center flex-shrink-0">
+                            <h2 className="font-medium flex items-center gap-2">
+                                {isEditing && <div className="drag-handle w-6 h-6 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center cursor-move">⋮⋮</div>}
+                                New Order
+                            </h2>
                         </div>
-                        <div className="p-3 sm:p-4 md:p-6 overflow-y-auto">
+                        <div className="flex-1 overflow-y-auto p-4 min-h-0">
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
                                 <div className="space-y-3 sm:space-y-4">
                                     <div>
@@ -1293,111 +1337,39 @@ const WebTerminal = () => {
             </div>
 
             {/* Settings Panel */}
-            <Dialog
-                open={showSettings}
-                onClose={handleSettingsClose}
-                className="relative z-50"
-            >
-                <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" aria-hidden="true" />
-                <div className="fixed inset-0 flex items-center justify-center p-4">
-                    <Dialog.Panel className="w-full max-w-2xl bg-magic-card rounded-xl shadow-lg">
-                        <div className="p-6 space-y-6">
-                            <div className="flex justify-between items-center border-b border-magic-border pb-4">
-                                <Dialog.Title className="text-xl font-semibold">
-                                    Terminal Settings
-                                </Dialog.Title>
-                                <button
-                                    onClick={handleSettingsClose}
-                                    className="p-2 rounded-lg hover:bg-magic-hover text-magic-muted transition-all"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
+            <SettingsPanel
+                isOpen={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
+                onToggleEditMode={toggleEditMode}
+                isEditing={isEditing}
+                onSaveLayout={saveLayout}
+                onResetLayout={resetLayout}
+                layoutPresets={LAYOUT_PRESETS}
+                selectedPreset={layoutState.selectedPreset}
+                onSelectPreset={handlePresetSelect}
+            />
 
-                            {/* Layout Presets */}
-                            <div className="space-y-6">
-                                <h3 className="text-lg font-medium">Layout Presets</h3>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    {Object.entries(LAYOUT_PRESETS).map(([preset, config]) => (
-                                        <button
-                                            key={preset}
-                                            onClick={() => handlePresetSelect(preset)}
-                                            className={`flex flex-col p-4 rounded-lg border-2 transition-all ${
-                                                layoutState.selectedPreset === preset
-                                                    ? 'border-magic-primary bg-magic-primary/10'
-                                                    : 'border-magic-border hover:border-magic-border-hover'
-                                            }`}
-                                        >
-                                            <span className="font-medium capitalize mb-1">
-                                                {preset} Layout
-                                            </span>
-                                            <span className="text-sm text-magic-muted mt-1">{config.description}</span>
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {/* Custom Layout Section */}
-                                <div className="pt-4 border-t border-magic-border">
-                                    <div className="flex justify-between items-center mb-4">
-                                        <div>
-                                            <h3 className="text-lg font-medium">Custom Layout</h3>
-                                            <p className="text-sm text-magic-muted mt-1">
-                                                Enable edit mode to customize panel positions and sizes
-                                            </p>
-                                        </div>
-                                        <button
-                                            onClick={() => setIsEditing(!isEditing)}
-                                            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                                                isEditing
-                                                    ? 'bg-magic-primary text-white'
-                                                    : 'bg-magic-hover text-magic-muted hover:bg-magic-hover/80'
-                                            }`}
-                                        >
-                                            {isEditing ? 'Disable Edit Mode' : 'Enable Edit Mode'}
-                                        </button>
-                                    </div>
-
-                                    {/* Save/Reset Buttons - Only show when in edit mode */}
-                                    {isEditing && (
-                                        <div className="flex flex-col sm:flex-row gap-4 mt-4">
-                                            <button
-                                                onClick={resetLayout}
-                                                className="flex-1 px-4 py-2 bg-magic-error/10 text-magic-error rounded-lg 
-                                                         hover:bg-magic-error/20 transition-all flex items-center justify-center gap-2"
-                                            >
-                                                <RotateCcw className="w-4 h-4" />
-                                                <span>Reset to Default</span>
-                                            </button>
-                                            <button
-                                                onClick={saveLayout}
-                                                className="flex-1 px-4 py-2 bg-magic-success/10 text-magic-success rounded-lg 
-                                                         hover:bg-magic-success/20 transition-all flex items-center justify-center gap-2"
-                                            >
-                                                <Save className="w-4 h-4" />
-                                                <span>Save Layout</span>
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Theme Settings */}
-                            <div className="space-y-4 border-t border-magic-border pt-4">
-                                <h3 className="text-lg font-medium">Display Settings</h3>
-                                <div className="space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-sm font-medium">Dark Mode</label>
-                                        <ThemeToggle />
-                                    </div>
-                                    <div className="bg-magic-card rounded-lg border border-magic-border p-4">
-                                        <ThemeCustomizer />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </Dialog.Panel>
+            {/* Save/Cancel Layout Buttons */}
+            {isEditing && (
+                <div className="fixed bottom-4 right-4 flex items-center gap-2">
+                    <button
+                        onClick={handleSettingsClose}
+                        className="px-4 py-2 bg-magic-error/10 text-magic-error rounded-lg 
+                                hover:bg-magic-error/20 transition-all flex items-center justify-center gap-2"
+                    >
+                        <X className="w-4 h-4" />
+                        <span>Cancel</span>
+                    </button>
+                    <button
+                        onClick={saveLayout}
+                        className="px-4 py-2 bg-magic-success/10 text-magic-success rounded-lg 
+                                hover:bg-magic-success/20 transition-all flex items-center justify-center gap-2"
+                    >
+                        <Save className="w-4 h-4" />
+                        <span>Save Layout</span>
+                    </button>
                 </div>
-            </Dialog>
+            )}
         </div>
     );
 };
