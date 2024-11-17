@@ -98,8 +98,8 @@ const WebTerminal = () => {
     const [selectedPosition, setSelectedPosition] = useState(null);
     const [isModifying, setIsModifying] = useState(false);
     const [modifyValues, setModifyValues] = useState({
-        sl: 0,
-        tp: 0
+        sl: '',
+        tp: ''
     });
     const [isCustomizerOpen, setIsCustomizerOpen] = useState(false);
     
@@ -933,61 +933,28 @@ const WebTerminal = () => {
         );
     };
 
-    const Position = ({ position, onClose, isExpanded, onToggleExpand }) => {
+    const Position = ({ position, onClose, isExpanded, onToggleExpand, onPartialClose, onModifyOpen }) => {
         const [isHovered, setIsHovered] = useState(false);
         const [isClosing, setIsClosing] = useState(false);
-        const [isModifying, setIsModifying] = useState(false);
-        const [modifyValues, setModifyValues] = useState({
-            sl: position.sl || '',
-            tp: position.tp || ''
-        });
 
         const handleBreakEven = async () => {
             try {
                 if (!ws.current || !eaConnected) return;
                 
-                ws.current.send(JSON.stringify({
-                    command: 'BreakEven',
-                    ticket: position.ticket,
+                sendMessage({
+                    command: 'BE',
+                    data: `BE,${position.ticket}`,
                     timestamp: Date.now()
-                }));
-                
-                setSuccess('Break even command sent successfully');
-                setTimeout(() => setSuccess(null), 3000);
+                }).then(() => {
+                    addToast('Break even command sent successfully', 'success');
+                }).catch(error => {
+                    addToast(`Break even error: ${error}`, 'error');
+                });
             } catch (error) {
                 console.error('Break even error:', error);
-                setError(error.message);
+                addToast(error.message, 'error');
             }
         };
-
-        const handleModify = async () => {
-            try {
-                if (!ws.current || !eaConnected) return;
-                
-                ws.current.send(JSON.stringify({
-                    command: 'ModifyPosition',
-                    ticket: position.ticket,
-                    sl: modifyValues.sl,
-                    tp: modifyValues.tp,
-                    timestamp: Date.now()
-                }));
-                
-                setSuccess('Modify position command sent successfully');
-                setTimeout(() => setSuccess(null), 3000);
-                setIsModifying(false);
-            } catch (error) {
-                console.error('Modify position error:', error);
-                setError(error.message);
-            }
-        };
-
-        const handlePartialClose = useCallback(() => {
-            setPartialCloseDialog({
-                isOpen: true,
-                ticket: position.ticket,
-                percentage: 50
-            });
-        }, [position.ticket]);
 
         const handleClose = async () => {
             setIsClosing(true);
@@ -1002,225 +969,125 @@ const WebTerminal = () => {
 
         return (
             <div 
-                className={`relative bg-card rounded-lg p-4 mb-2 transition-all duration-200
-                    ${isClosing ? 'opacity-50' : 'opacity-100'}`}
-                style={{ 
-                    backgroundColor: colors.background.tertiary,
-                    borderWidth: '1px',
-                    borderColor: colors.border.light,
-                }}
+                className={`relative bg-opacity-50 rounded-lg p-4 mb-2 transition-all duration-200 ${
+                    isHovered ? 'bg-opacity-75' : ''
+                }`}
+                style={{ backgroundColor: colors.background.secondary }}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
             >
-                <div className="flex justify-between items-center">
-                    <div className="flex-grow">
-                        <div className="flex items-center gap-2 mb-2">
-                            <span className="font-medium" style={{ color: colors.text.primary }}>
+                {/* Position Header */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                        <span className={`text-2xl ${position.type === 0 ? 'text-magic-success' : 'text-magic-error'}`}>
+                            {position.type === 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
+                        </span>
+                        <div>
+                            <h3 className="text-lg font-semibold" style={{ color: colors.text.primary }}>
                                 {position.symbol}
-                            </span>
-                            <span 
-                                className="px-2 py-0.5 text-xs rounded-full"
-                                style={{ 
-                                    backgroundColor: position.type === 0 ? colors.action.buy.bg : colors.action.sell.bg,
-                                    color: position.type === 0 ? colors.action.buy.base : colors.action.sell.base
-                                }}
-                            >
-                                {position.type === 0 ? 'Buy' : 'Sell'}
-                            </span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-x-8 gap-y-1">
-                            <div className="flex justify-between">
-                                <span className="text-xs" style={{ color: colors.text.muted }}>Volume:</span>
-                                <span className="text-xs" style={{ color: colors.text.primary }}>{position.lots}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-xs" style={{ color: colors.text.muted }}>Open Price:</span>
-                                <span className="text-xs" style={{ color: colors.text.primary }}>{position.openPrice}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-xs" style={{ color: colors.text.muted }}>Current Price:</span>
-                                <span className="text-xs" style={{ color: colors.text.primary }}>{position.currentPrice}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-xs" style={{ color: colors.text.muted }}>Profit/Loss:</span>
-                                <span 
-                                    className="text-xs"
-                                    style={{ color: position.profit >= 0 ? colors.status.success.base : colors.status.error.base }}
-                                >
-                                    {position.profit}
-                                </span>
-                            </div>
+                            </h3>
+                            <p className="text-sm" style={{ color: colors.text.muted }}>
+                                Ticket: {position.ticket}
+                            </p>
                         </div>
                     </div>
-                    <div className="flex flex-col items-center gap-2 ml-4">
-                        <button
-                            onClick={onClose}
-                            className="p-1.5 rounded-lg transition-all duration-200 hover:bg-opacity-80"
+                    <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                            <p className="text-sm font-semibold" style={{ color: colors.text.primary }}>
+                                {position.lots} Lots
+                            </p>
+                            <p className={`text-sm font-semibold ${position.profit >= 0 ? 'text-magic-success' : 'text-magic-error'}`}>
+                                {(position.profit || 0).toFixed(2)} USD
+                            </p>
+                        </div>
+                        <button 
+                            onClick={() => onToggleExpand(position.ticket)}
+                            className="p-2 rounded-full hover:bg-opacity-25 transition-all duration-200"
                             style={{ backgroundColor: colors.background.hover }}
                         >
-                            <X className="w-4 h-4" style={{ color: colors.text.muted }} />
-                        </button>
-                        <button
-                            onClick={onToggleExpand}
-                            className="p-1.5 rounded-lg transition-all duration-200 hover:bg-opacity-80"
-                            style={{ backgroundColor: colors.background.hover }}
-                        >
-                            {isExpanded ? (
-                                <ChevronUp className="w-4 h-4" style={{ color: colors.text.muted }} />
-                            ) : (
-                                <ChevronDown className="w-4 h-4" style={{ color: colors.text.muted }} />
-                            )}
+                            <ChevronDown 
+                                size={20} 
+                                className={`transform transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                                style={{ color: colors.text.muted }}
+                            />
                         </button>
                     </div>
                 </div>
 
+                {/* Expanded Content */}
                 {isExpanded && (
                     <>
-                        <div 
-                            className="mt-3 pt-3 border-t grid grid-cols-2 gap-x-8 gap-y-1"
-                            style={{ borderColor: colors.border.light }}
-                        >
-                            <div className="flex justify-between">
-                                <span className="text-xs" style={{ color: colors.text.muted }}>Stop Loss:</span>
-                                <span className="text-xs" style={{ color: colors.text.primary }}>{position.sl || 'Not Set'}</span>
+                        {/* Position Details */}
+                        <div className="mt-4 grid grid-cols-2 gap-4 text-sm" style={{ color: colors.text.muted }}>
+                            <div>
+                                <p>Open Price: {position.openPrice}</p>
+                                <p>Stop Loss: {position.sl || 'Not Set'}</p>
+                                <p>Take Profit: {position.tp || 'Not Set'}</p>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-xs" style={{ color: colors.text.muted }}>Take Profit:</span>
-                                <span className="text-xs" style={{ color: colors.text.primary }}>{position.tp || 'Not Set'}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-xs" style={{ color: colors.text.muted }}>Swap:</span>
-                                <span className="text-xs" style={{ color: colors.text.primary }}>{position.swap || '0.00'}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-xs" style={{ color: colors.text.muted }}>Commission:</span>
-                                <span className="text-xs" style={{ color: colors.text.primary }}>{position.commission || '0.00'}</span>
+                            <div>
+                                <p>Swap: {(position.swap || 0).toFixed(2)}</p>
+                                <p>Commission: {(position.commission || 0).toFixed(2)}</p>
+                                <p>Total: {((position.profit || 0) + (position.swap || 0) + (position.commission || 0)).toFixed(2)}</p>
                             </div>
                         </div>
 
                         {/* Action Buttons */}
-                        {isModifying ? (
-                            <div className="mt-3 pt-3 border-t" style={{ borderColor: colors.border.light }}>
-                                <div className="grid grid-cols-2 gap-4 mb-3">
-                                    <div>
-                                        <label className="text-xs mb-1 block" style={{ color: colors.text.muted }}>
-                                            Stop Loss
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={modifyValues.sl}
-                                            onChange={(e) => setModifyValues(prev => ({ ...prev, sl: e.target.value }))}
-                                            className="w-full px-2 py-1 rounded text-sm transition-all duration-200"
-                                            style={{ 
-                                                backgroundColor: colors.background.secondary,
-                                                color: colors.text.primary,
-                                                borderColor: colors.border.light,
-                                                borderWidth: '1px'
-                                            }}
-                                            placeholder="Enter Stop Loss"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs mb-1 block" style={{ color: colors.text.muted }}>
-                                            Take Profit
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={modifyValues.tp}
-                                            onChange={(e) => setModifyValues(prev => ({ ...prev, tp: e.target.value }))}
-                                            className="w-full px-2 py-1 rounded text-sm transition-all duration-200"
-                                            style={{ 
-                                                backgroundColor: colors.background.secondary,
-                                                color: colors.text.primary,
-                                                borderColor: colors.border.light,
-                                                borderWidth: '1px'
-                                            }}
-                                            placeholder="Enter Take Profit"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex justify-end space-x-2">
-                                    <button
-                                        onClick={() => setIsModifying(false)}
-                                        className="px-3 py-1 rounded text-sm transition-all duration-200"
-                                        style={{ 
-                                            backgroundColor: colors.background.hover,
-                                            color: colors.text.muted
-                                        }}
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={handleModify}
-                                        className="px-3 py-1 rounded text-sm transition-all duration-200"
-                                        style={{ 
-                                            backgroundColor: colors.status.warning.bg,
-                                            color: colors.status.warning.base,
-                                            borderColor: colors.status.warning.border,
-                                            borderWidth: '1px'
-                                        }}
-                                    >
-                                        Apply
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="flex space-x-2 mt-3 pt-3 border-t" style={{ borderColor: colors.border.light }}>
-                                {/* Break Even Button */}
-                                <button 
-                                    onClick={handleBreakEven}
-                                    className="flex-1 flex flex-col items-center px-3 py-2 rounded-lg transition-all duration-200"
-                                    style={{
-                                        backgroundColor: colors.status.info.bg,
-                                        borderColor: colors.status.info.border,
-                                        borderWidth: '1px',
-                                    }}>
-                                    <Target className="w-4 h-4" style={{ color: colors.status.info.base }} />
-                                    <span className="text-xs mt-1" style={{ color: colors.text.secondary }}>BE</span>
-                                </button>
+                        <div className="flex space-x-2 mt-3 pt-3 border-t" style={{ borderColor: colors.border.light }}>
+                            {/* Break Even Button */}
+                            <button 
+                                onClick={handleBreakEven}
+                                className="flex-1 flex flex-col items-center px-3 py-2 rounded-lg transition-all duration-200"
+                                style={{
+                                    backgroundColor: colors.status.info.bg,
+                                    borderColor: colors.status.info.border,
+                                    borderWidth: '1px'
+                                }}
+                            >
+                                <span className="text-sm font-medium" style={{ color: colors.status.info.base }}>Break Even</span>
+                            </button>
 
-                                {/* Modify Button */}
-                                <button 
-                                    onClick={() => setIsModifying(true)}
-                                    className="flex-1 flex flex-col items-center px-3 py-2 rounded-lg transition-all duration-200"
-                                    style={{
-                                        backgroundColor: colors.status.warning.bg,
-                                        borderColor: colors.status.warning.border,
-                                        borderWidth: '1px',
-                                    }}>
-                                    <Pencil className="w-4 h-4" style={{ color: colors.status.warning.base }} />
-                                    <span className="text-xs mt-1" style={{ color: colors.text.secondary }}>Modify</span>
-                                </button>
+                            {/* Modify Button */}
+                            <button 
+                                onClick={() => onModifyOpen(position)}
+                                className="flex-1 flex flex-col items-center px-3 py-2 rounded-lg transition-all duration-200"
+                                style={{
+                                    backgroundColor: colors.status.warning.bg,
+                                    borderColor: colors.status.warning.border,
+                                    borderWidth: '1px'
+                                }}
+                            >
+                                <span className="text-sm font-medium" style={{ color: colors.status.warning.base }}>Modify</span>
+                            </button>
 
-                                {/* Partial Close Button */}
-                                <button 
-                                    onClick={handlePartialClose}
-                                    className="flex-1 flex flex-col items-center px-3 py-2 rounded-lg transition-all duration-200"
-                                    style={{
-                                        backgroundColor: colors.status.success.bg,
-                                        borderColor: colors.status.success.border,
-                                        borderWidth: '1px',
-                                    }}>
-                                    <SplitSquareHorizontal className="w-4 h-4" style={{ color: colors.status.success.base }} />
-                                    <span className="text-xs mt-1" style={{ color: colors.text.secondary }}>Partial</span>
-                                </button>
+                            {/* Partial Button */}
+                            <button 
+                                onClick={() => onPartialClose(position.ticket)}
+                                className="flex-1 flex flex-col items-center px-3 py-2 rounded-lg transition-all duration-200"
+                                style={{
+                                    backgroundColor: colors.status.warning.bg,
+                                    borderColor: colors.status.warning.border,
+                                    borderWidth: '1px'
+                                }}
+                            >
+                                <span className="text-sm font-medium" style={{ color: colors.status.warning.base }}>Partial</span>
+                            </button>
 
-                                {/* Close Button */}
-                                <button 
-                                    onClick={handleClose}
-                                    disabled={isClosing}
-                                    className="flex-1 flex flex-col items-center px-3 py-2 rounded-lg transition-all duration-200"
-                                    style={{
-                                        backgroundColor: colors.status.error.bg,
-                                        borderColor: colors.status.error.border,
-                                        borderWidth: '1px',
-                                        opacity: isClosing ? 0.5 : 1
-                                    }}>
-                                    <XCircle className="w-4 h-4" style={{ color: colors.status.error.base }} />
-                                    <span className="text-xs mt-1" style={{ color: colors.text.secondary }}>Close</span>
-                                </button>
-                            </div>
-                        )}
+                            {/* Close Button */}
+                            <button
+                                onClick={handleClose}
+                                disabled={isClosing}
+                                className="flex-1 flex flex-col items-center px-3 py-2 rounded-lg transition-all duration-200"
+                                style={{
+                                    backgroundColor: colors.status.error.bg,
+                                    borderColor: colors.status.error.border,
+                                    borderWidth: '1px'
+                                }}
+                            >
+                                <span className="text-sm font-medium" style={{ color: colors.status.error.base }}>
+                                    {isClosing ? 'Closing...' : 'Close'}
+                                </span>
+                            </button>
+                        </div>
                     </>
                 )}
             </div>
@@ -1283,13 +1150,34 @@ const WebTerminal = () => {
     }, []);
 
     // Update the existing renderPositions function to handle closed positions
-    const renderPositions = positions.map((position) => (
+    const [partialCloseDialog, setPartialCloseDialog] = useState({
+        isOpen: false,
+        ticket: null,
+        percentage: 50  // Default to 50%
+    });
+
+    const handlePartialClose = useCallback((ticket) => {
+        setPartialCloseDialog(prev => ({ ...prev, isOpen: true, ticket }));
+    }, []);
+
+    const handleModifyOpen = useCallback((position) => {
+        setSelectedPosition(position);
+        setModifyValues({
+            sl: position.sl || '',
+            tp: position.tp || ''
+        });
+        setShowModifyDialog(true);
+    }, []);
+
+    const positionList = positions.map(position => (
         <Position
             key={position.ticket}
             position={position}
             onClose={() => handleClosePosition(position.ticket)}
             isExpanded={expandedPositions.has(position.ticket)}
             onToggleExpand={() => togglePositionExpand(position.ticket)}
+            onPartialClose={handlePartialClose}
+            onModifyOpen={handleModifyOpen}
         />
     ));
 
@@ -1370,32 +1258,6 @@ const WebTerminal = () => {
             setSelectedTimeframe(settings.selectedTimeframe || '1H');
             setSelectedSymbol(settings.selectedSymbol || 'EURUSD');
         }
-    }, []);
-
-    const [partialCloseDialog, setPartialCloseDialog] = useState({
-        isOpen: false,
-        ticket: null,
-        percentage: 50  // Default to 50%
-    });
-
-    const handlePartialCloseConfirm = useCallback(() => {
-        if (!partialCloseDialog.ticket || !partialCloseDialog.percentage) return;
-
-        sendMessage({
-            command: 'PARTIAL',
-            data: `PARTIAL,${partialCloseDialog.ticket},${partialCloseDialog.percentage}`,
-            timestamp: Date.now()
-        }).then(() => {
-            addToast(`Partially closing position ${partialCloseDialog.ticket}`, 'info');
-        }).catch(error => {
-            addToast(`Failed to partially close position: ${error}`, 'error');
-        });
-
-        setPartialCloseDialog({ isOpen: false, ticket: null, percentage: 50 });
-    }, [partialCloseDialog, sendMessage, addToast]);
-
-    const handlePartialCloseCancel = useCallback(() => {
-        setPartialCloseDialog({ isOpen: false, ticket: null, percentage: 50 });
     }, []);
 
     const renderTopBar = () => {
@@ -1695,13 +1557,83 @@ const WebTerminal = () => {
                     </div>
                     <div className="flex justify-end space-x-3">
                         <button
-                            onClick={handlePartialCloseCancel}
+                            onClick={() => setPartialCloseDialog(prev => ({ ...prev, isOpen: false }))}
                             className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
                         >
                             Cancel
                         </button>
                         <button
-                            onClick={handlePartialCloseConfirm}
+                            onClick={() => {
+                                sendMessage({
+                                    command: 'PARTIAL',
+                                    data: `PARTIAL,${partialCloseDialog.ticket},${partialCloseDialog.percentage}`,
+                                    timestamp: Date.now()
+                                }).then(() => {
+                                    addToast(`Partially closing position ${partialCloseDialog.ticket}`, 'info');
+                                }).catch(error => {
+                                    addToast(`Failed to partially close position: ${error}`, 'error');
+                                });
+                                setPartialCloseDialog(prev => ({ ...prev, isOpen: false }));
+                            }}
+                            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                        >
+                            Confirm
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const [showModifyDialog, setShowModifyDialog] = useState(false);
+
+    const renderModifyDialog = () => {
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-[#1a1f2e] rounded-lg p-6 w-96">
+                    <h3 className="text-lg font-semibold mb-4 text-white">Modify Position</h3>
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Stop Loss
+                        </label>
+                        <input
+                            type="number"
+                            value={modifyValues.sl}
+                            onChange={(e) => setModifyValues(prev => ({ ...prev, sl: e.target.value }))}
+                            className="w-full px-3 py-2 bg-[#2a3441] border border-[#3a4451] rounded-md text-white"
+                        />
+                    </div>
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Take Profit
+                        </label>
+                        <input
+                            type="number"
+                            value={modifyValues.tp}
+                            onChange={(e) => setModifyValues(prev => ({ ...prev, tp: e.target.value }))}
+                            className="w-full px-3 py-2 bg-[#2a3441] border border-[#3a4451] rounded-md text-white"
+                        />
+                    </div>
+                    <div className="flex justify-end space-x-3">
+                        <button
+                            onClick={() => setShowModifyDialog(false)}
+                            className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={() => {
+                                sendMessage({
+                                    command: 'MODIFY',
+                                    data: `MODIFY,${selectedPosition.ticket},${modifyValues.sl},${modifyValues.tp}`,
+                                    timestamp: Date.now()
+                                }).then(() => {
+                                    addToast(`Modifying position ${selectedPosition.ticket}`, 'info');
+                                }).catch(error => {
+                                    addToast(`Failed to modify position: ${error}`, 'error');
+                                });
+                                setShowModifyDialog(false);
+                            }}
                             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
                         >
                             Confirm
@@ -1748,7 +1680,7 @@ const WebTerminal = () => {
                                 </div>
                             ) : (
                                 <div className="grid gap-3 p-4">
-                                    {renderPositions}
+                                    {positionList}
                                 </div>
                             )}
                         </div>
@@ -2014,6 +1946,9 @@ const WebTerminal = () => {
 
             {/* Partial Close Dialog */}
             {partialCloseDialog.isOpen && renderPartialCloseDialog()}
+
+            {/* Modify Dialog */}
+            {showModifyDialog && renderModifyDialog()}
 
             {/* Toast Container */}
             <ToastContainer toasts={toasts} removeToast={removeToast} />
