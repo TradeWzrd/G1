@@ -1387,7 +1387,10 @@ const WebTerminal = () => {
     const renderPositionsHeader = () => {
         return (
             <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: colors.border.light }}>
-                <h2 className="text-lg font-medium" style={{ color: colors.text.primary }}>Open Positions</h2>
+                <h2 className="flex items-center gap-2 text-lg font-medium" style={{ color: colors.text.primary }}>
+                    {isEditing && <div className="drag-handle w-6 h-6 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center cursor-move">⋮⋮</div>}
+                    Open Positions
+                </h2>
                 {positions.length > 0 && (
                     <button
                         onClick={handleCloseAll}
@@ -1412,6 +1415,7 @@ const WebTerminal = () => {
                 {/* Chart Header */}
                 <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: colors.border.light }}>
                     <div className="flex items-center gap-2">
+                        {isEditing && <div className="drag-handle w-6 h-6 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center cursor-move">⋮⋮</div>}
                         <BarChart2 className="w-5 h-5" style={{ color: colors.status.info.base }} />
                         <h2 className="text-lg font-medium" style={{ color: colors.text.primary }}>Chart</h2>
                     </div>
@@ -1540,6 +1544,89 @@ const WebTerminal = () => {
         );
     };
 
+    const renderAccountInfo = () => {
+        return (
+            <div key="account" className="flex flex-col h-full" style={{ backgroundColor: colors.background.secondary }}>
+                {/* Panel Header */}
+                <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: colors.border.light }}>
+                    <h2 className="flex items-center gap-2 text-lg font-semibold" style={{ color: colors.text.primary }}>
+                        {isEditing && <div className="drag-handle w-6 h-6 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center cursor-move">⋮⋮</div>}
+                        Account Information
+                    </h2>
+                </div>
+
+                {/* Account Stats */}
+                <div className="p-4">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                        {/* Balance Card */}
+                        <div className="p-3 rounded-lg transition-all duration-200"
+                            style={{ 
+                                backgroundColor: colors.background.tertiary,
+                                borderWidth: '1px',
+                                borderColor: colors.border.light,
+                            }}>
+                            <div className="flex items-center gap-2 mb-1.5">
+                                <Wallet className="w-4 h-4" style={{ color: colors.status.info.base }} />
+                                <span className="text-xs" style={{ color: colors.text.muted }}>Balance</span>
+                            </div>
+                            <div className="text-base font-medium" style={{ color: colors.text.primary }}>
+                                {accountData?.balance || '0.00'}
+                            </div>
+                        </div>
+
+                        {/* Equity Card */}
+                        <div className="p-3 rounded-lg transition-all duration-200"
+                            style={{ 
+                                backgroundColor: colors.background.tertiary,
+                                borderWidth: '1px',
+                                borderColor: colors.border.light,
+                            }}>
+                            <div className="flex items-center gap-2 mb-1.5">
+                                <Activity className="w-4 h-4" style={{ color: colors.status.success.base }} />
+                                <span className="text-xs" style={{ color: colors.text.muted }}>Equity</span>
+                            </div>
+                            <div className="text-base font-medium" style={{ color: colors.text.primary }}>
+                                {accountData?.equity || '0.00'}
+                            </div>
+                        </div>
+
+                        {/* Margin Card */}
+                        <div className="p-3 rounded-lg transition-all duration-200"
+                            style={{ 
+                                backgroundColor: colors.background.tertiary,
+                                borderWidth: '1px',
+                                borderColor: colors.border.light,
+                            }}>
+                            <div className="flex items-center gap-2 mb-1.5">
+                                <DollarSign className="w-4 h-4" style={{ color: colors.status.warning.base }} />
+                                <span className="text-xs" style={{ color: colors.text.muted }}>Margin</span>
+                            </div>
+                            <div className="text-base font-medium" style={{ color: colors.text.primary }}>
+                                {accountData?.margin || '0.00'}
+                            </div>
+                        </div>
+
+                        {/* Free Margin Card */}
+                        <div className="p-3 rounded-lg transition-all duration-200"
+                            style={{ 
+                                backgroundColor: colors.background.tertiary,
+                                borderWidth: '1px',
+                                borderColor: colors.border.light,
+                            }}>
+                            <div className="flex items-center gap-2 mb-1.5">
+                                <RefreshCw className="w-4 h-4" style={{ color: colors.status.info.base }} />
+                                <span className="text-xs" style={{ color: colors.text.muted }}>Free Margin</span>
+                            </div>
+                            <div className="text-base font-medium" style={{ color: colors.text.primary }}>
+                                {accountData?.freeMargin || '0.00'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="flex flex-col h-screen"
             style={{ backgroundColor: colors.background.primary }}>
@@ -1559,84 +1646,7 @@ const WebTerminal = () => {
                     {renderChartPanel()}
 
                     {/* Account Information */}
-                    <div key="account" className="flex flex-col h-full" style={{ backgroundColor: colors.background.secondary }}>
-                        {/* Panel Header */}
-                        <div className="flex items-center justify-between p-4 border-b"
-                            style={{ borderColor: colors.border.light }}>
-                            <h2 className="flex items-center gap-2 text-lg font-semibold" style={{ color: colors.text.primary }}>
-                                Account Information
-                            </h2>
-                        </div>
-
-                        {/* Account Stats */}
-                        <div className="p-4">
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                                {/* Balance Card */}
-                                <div className="p-3 rounded-lg transition-all duration-200"
-                                    style={{ 
-                                        backgroundColor: colors.background.tertiary,
-                                        borderWidth: '1px',
-                                        borderColor: colors.border.light,
-                                    }}>
-                                    <div className="flex items-center gap-2 mb-1.5">
-                                        <Wallet className="w-4 h-4" style={{ color: colors.status.info.base }} />
-                                        <span className="text-xs" style={{ color: colors.text.muted }}>Balance</span>
-                                    </div>
-                                    <div className="text-base font-medium" style={{ color: colors.text.primary }}>
-                                        {accountData?.balance || '0.00'}
-                                    </div>
-                                </div>
-
-                                {/* Equity Card */}
-                                <div className="p-3 rounded-lg transition-all duration-200"
-                                    style={{ 
-                                        backgroundColor: colors.background.tertiary,
-                                        borderWidth: '1px',
-                                        borderColor: colors.border.light,
-                                    }}>
-                                    <div className="flex items-center gap-2 mb-1.5">
-                                        <Activity className="w-4 h-4" style={{ color: colors.status.success.base }} />
-                                        <span className="text-xs" style={{ color: colors.text.muted }}>Equity</span>
-                                    </div>
-                                    <div className="text-base font-medium" style={{ color: colors.text.primary }}>
-                                        {accountData?.equity || '0.00'}
-                                    </div>
-                                </div>
-
-                                {/* Margin Card */}
-                                <div className="p-3 rounded-lg transition-all duration-200"
-                                    style={{ 
-                                        backgroundColor: colors.background.tertiary,
-                                        borderWidth: '1px',
-                                        borderColor: colors.border.light,
-                                    }}>
-                                    <div className="flex items-center gap-2 mb-1.5">
-                                        <DollarSign className="w-4 h-4" style={{ color: colors.status.warning.base }} />
-                                        <span className="text-xs" style={{ color: colors.text.muted }}>Margin</span>
-                                    </div>
-                                    <div className="text-base font-medium" style={{ color: colors.text.primary }}>
-                                        {accountData?.margin || '0.00'}
-                                    </div>
-                                </div>
-
-                                {/* Free Margin Card */}
-                                <div className="p-3 rounded-lg transition-all duration-200"
-                                    style={{ 
-                                        backgroundColor: colors.background.tertiary,
-                                        borderWidth: '1px',
-                                        borderColor: colors.border.light,
-                                    }}>
-                                    <div className="flex items-center gap-2 mb-1.5">
-                                        <RefreshCw className="w-4 h-4" style={{ color: colors.status.info.base }} />
-                                        <span className="text-xs" style={{ color: colors.text.muted }}>Free Margin</span>
-                                    </div>
-                                    <div className="text-base font-medium" style={{ color: colors.text.primary }}>
-                                        {accountData?.freeMargin || '0.00'}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    {renderAccountInfo()}
 
                     {/* Open Positions */}
                     <div key="positions" className="flex flex-col h-full" style={{ backgroundColor: colors.background.secondary }}>
@@ -1660,22 +1670,22 @@ const WebTerminal = () => {
                     </div>
 
                     {/* New Order */}
-                    <div key="orders" className="flex flex-col h-full" style={{ backgroundColor: colors.background.secondary }}>
+                    <div key="orders" className="flex flex-col h-full overflow-hidden" style={{ backgroundColor: colors.background.secondary }}>
                         {/* Panel Header */}
                         <div className="flex items-center justify-between p-4 border-b"
                             style={{ borderColor: colors.border.light }}>
-                            <h2 className="flex items-center gap-2 text-lg font-semibold" style={{ color: colors.text.primary }}>
+                            <h2 className="flex items-center gap-2 text-lg font-medium" style={{ color: colors.text.primary }}>
                                 {isEditing && <div className="drag-handle w-6 h-6 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center cursor-move">⋮⋮</div>}
                                 New Order
                             </h2>
                         </div>
 
                         {/* Panel Content */}
-                        <div className="flex-1 p-4">
+                        <div className="flex-1 p-4 overflow-y-auto">
                             {/* Form Content */}
-                            <div className="space-y-4">
+                            <div className="space-y-4 max-w-lg mx-auto">
                                 {/* Symbol and Volume */}
-                                <div className="grid grid-cols-1 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {/* Symbol Input */}
                                     <div className="space-y-1">
                                         <label className="block text-xs" style={{ color: colors.text.muted }}>
@@ -1721,7 +1731,7 @@ const WebTerminal = () => {
                                 </div>
 
                                 {/* Stop Loss and Take Profit */}
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {/* Stop Loss Input */}
                                     <div className="space-y-1">
                                         <label className="block text-xs" style={{ color: colors.text.muted }}>
@@ -1766,13 +1776,13 @@ const WebTerminal = () => {
                                 </div>
 
                                 {/* Buy/Sell Buttons */}
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="flex flex-col sm:flex-row gap-3 w-full">
                                     {/* Buy Button */}
                                     <button
                                         onClick={() => executeTrade(0)}
-                                        className="relative flex items-center justify-center px-4 py-2.5 rounded-lg 
+                                        className="flex-1 relative flex items-center justify-center px-4 py-2.5 rounded-lg 
                                             transform hover:scale-[1.02] active:scale-[0.98]
-                                            transition-all duration-300 ease-out"
+                                            transition-all duration-300 ease-out min-w-[120px]"
                                         style={{
                                             backgroundColor: colors.action.buy.bg,
                                             borderWidth: '1px',
@@ -1788,9 +1798,9 @@ const WebTerminal = () => {
                                     {/* Sell Button */}
                                     <button
                                         onClick={() => executeTrade(1)}
-                                        className="relative flex items-center justify-center px-4 py-2.5 rounded-lg 
+                                        className="flex-1 relative flex items-center justify-center px-4 py-2.5 rounded-lg 
                                             transform hover:scale-[1.02] active:scale-[0.98]
-                                            transition-all duration-300 ease-out"
+                                            transition-all duration-300 ease-out min-w-[120px]"
                                         style={{
                                             backgroundColor: colors.action.sell.bg,
                                             borderWidth: '1px',
