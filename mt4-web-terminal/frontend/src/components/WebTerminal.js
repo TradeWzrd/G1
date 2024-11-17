@@ -967,6 +967,32 @@ const WebTerminal = () => {
             }
         };
 
+        const handleCopy = (value) => {
+            navigator.clipboard.writeText(value).then(() => {
+                addToast('Price copied to clipboard', 'success');
+            }).catch(err => {
+                addToast('Failed to copy price', 'error');
+            });
+        };
+
+        const PriceField = ({ label, value }) => (
+            <div className="flex items-center space-x-2">
+                <button 
+                    onClick={() => handleCopy(value)}
+                    className="p-1 hover:bg-gray-700 rounded transition-colors duration-200"
+                    title="Copy price"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                    </svg>
+                </button>
+                <div className="flex flex-col">
+                    <span className="text-xs text-gray-500">{label}</span>
+                    <span className="text-sm">{value}</span>
+                </div>
+            </div>
+        );
+
         return (
             <div 
                 className={`relative bg-opacity-50 rounded-lg p-4 mb-2 transition-all duration-200 ${
@@ -1003,7 +1029,10 @@ const WebTerminal = () => {
                         <button 
                             onClick={() => onToggleExpand(position.ticket)}
                             className="p-2 rounded-full hover:bg-opacity-25 transition-all duration-200"
-                            style={{ backgroundColor: colors.background.hover }}
+                            style={{ 
+                                backgroundColor: colors.background.hover,
+                                color: colors.text.muted 
+                            }}
                         >
                             <ChevronDown 
                                 size={20} 
@@ -1020,14 +1049,23 @@ const WebTerminal = () => {
                         {/* Position Details */}
                         <div className="mt-4 grid grid-cols-2 gap-4 text-sm" style={{ color: colors.text.muted }}>
                             <div>
-                                <p>Open Price: {position.openPrice}</p>
-                                <p>Stop Loss: {position.sl || 'Not Set'}</p>
-                                <p>Take Profit: {position.tp || 'Not Set'}</p>
+                                <PriceField label="Open Price" value={position.openPrice} />
+                                <PriceField label="Stop Loss" value={position.sl || 'Not Set'} />
+                                <PriceField label="Take Profit" value={position.tp || 'Not Set'} />
                             </div>
                             <div>
-                                <p>Swap: {(position.swap || 0).toFixed(2)}</p>
-                                <p>Commission: {(position.commission || 0).toFixed(2)}</p>
-                                <p>Total: {((position.profit || 0) + (position.swap || 0) + (position.commission || 0)).toFixed(2)}</p>
+                                <div className="flex flex-col mb-2">
+                                    <span className="text-xs text-gray-500">Swap</span>
+                                    <span className="text-sm">{(position.swap || 0).toFixed(2)}</span>
+                                </div>
+                                <div className="flex flex-col mb-2">
+                                    <span className="text-xs text-gray-500">Commission</span>
+                                    <span className="text-sm">{(position.commission || 0).toFixed(2)}</span>
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-xs text-gray-500">Total</span>
+                                    <span className="text-sm">{((position.profit || 0) + (position.swap || 0) + (position.commission || 0)).toFixed(2)}</span>
+                                </div>
                             </div>
                         </div>
 
