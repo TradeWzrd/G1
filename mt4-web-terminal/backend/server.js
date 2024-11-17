@@ -552,10 +552,24 @@ wss.on('connection', (ws) => {
 
     // Send initial state
     if (lastKnownState) {
+        // Send status
         ws.send(JSON.stringify({
-            type: 'update',
-            connected: eaConnected,
-            data: lastKnownState
+            type: 'status',
+            data: {
+                connected: eaConnected
+            }
+        }));
+
+        // Send account data
+        ws.send(JSON.stringify({
+            type: 'account',
+            data: lastKnownState.account
+        }));
+
+        // Send positions
+        ws.send(JSON.stringify({
+            type: 'positions',
+            data: lastKnownState.positions
         }));
     }
 
@@ -578,9 +592,10 @@ wss.on('connection', (ws) => {
             else if (data.command === 'GET_STATUS') {
                 // Send current state
                 ws.send(JSON.stringify({
-                    type: 'update',
-                    connected: eaConnected,
-                    data: lastKnownState
+                    type: 'status',
+                    data: {
+                        connected: eaConnected
+                    }
                 }));
             }
             else if (data.command === 'GET_POSITIONS') {
@@ -588,6 +603,13 @@ wss.on('connection', (ws) => {
                 ws.send(JSON.stringify({
                     type: 'positions',
                     data: lastKnownState.positions
+                }));
+            }
+            else if (data.command === 'GET_ACCOUNT') {
+                // Send current account data
+                ws.send(JSON.stringify({
+                    type: 'account',
+                    data: lastKnownState.account
                 }));
             }
         } catch (error) {
