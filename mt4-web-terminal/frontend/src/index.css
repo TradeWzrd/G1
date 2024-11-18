@@ -4,6 +4,7 @@
 
 @layer base {
   :root {
+    --font-sans: BlinkMacSystemFont, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
     --radius: 0.5rem;
     --saturation-factor: 1;
 
@@ -100,10 +101,12 @@
 @layer base {
   * {
     @apply border-border;
+    font-family: var(--font-sans);
   }
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: var(--font-sans);
   }
 }
 

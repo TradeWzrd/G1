@@ -16,6 +16,9 @@ module.exports = {
         "2xl": "1400px",
       },
     },
+    fontFamily: {
+      sans: ['BlinkMacSystemFont', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', 'sans-serif'],
+    },
     extend: {
       colors: {
         border: "hsl(var(--border))",

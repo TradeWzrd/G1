@@ -1,10 +1,10 @@
 import React from 'react';
 import { Monitor, Moon, Sun } from 'lucide-react';
-import { Button } from './ui/button';
-import { useTheme } from './ThemeProvider';
-import { Label } from './ui/label';
-import { Slider } from './ui/slider';
-import { Separator } from './ui/separator';
+import { Button } from './button';
+import { useTheme } from '../ThemeProvider';
+import { Label } from './label';
+import { Slider } from './slider';
+import { Separator } from './separator';
 
 // Shadcn Theme Templates
 const themes = [
