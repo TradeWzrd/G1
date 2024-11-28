@@ -16,6 +16,7 @@ import {
     Clock,
     RefreshCw
 } from 'lucide-react';
+import ForexSessionsMap from './ForexSessionsMap';
 
 const Dashboard = ({ accountData, equityHistory, connected, eaConnected }) => {
     // Helper function to safely get numeric values
@@ -122,8 +123,8 @@ const Dashboard = ({ accountData, equityHistory, connected, eaConnected }) => {
                 <div className="flex items-center space-x-4">
                     <div className={`flex items-center px-3 py-1.5 rounded-full text-xs ${
                         connected 
-                            ? 'bg-[#10B98110] text-[#10B981] shadow-[0_0_10px_rgba(16,185,129,0.1)]' 
-                            : 'bg-[#EF444410] text-[#EF4444] shadow-[0_0_10px_rgba(239,68,68,0.1)]'
+                            ? 'bg-[#10B98110] text-[#10B981]' 
+                            : 'bg-[#EF444410] text-[#EF4444]'
                     }`}>
                         <div className={`w-1.5 h-1.5 rounded-full mr-2 ${
                             connected 
@@ -134,7 +135,7 @@ const Dashboard = ({ accountData, equityHistory, connected, eaConnected }) => {
                     </div>
                     <div className={`flex items-center px-3 py-1.5 rounded-full text-xs ${
                         eaConnected 
-                            ? 'bg-[#3B82F610] text-[#3B82F6] shadow-[0_0_10px_rgba(59,130,246,0.1)]' 
+                            ? 'bg-[#3B82F610] text-[#3B82F6]' 
                             : 'bg-[#FFFFFF0A] text-[#737373]'
                     }`}>
                         <div className={`w-1.5 h-1.5 rounded-full mr-2 ${
@@ -171,10 +172,10 @@ const Dashboard = ({ accountData, equityHistory, connected, eaConnected }) => {
                 ))}
             </div>
 
-            {/* Charts Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+            {/* Main Content Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Equity Chart */}
-                <div className="p-6 rounded-2xl border border-[#FFFFFF1A] bg-[#12131A] shadow-[0_8px_16px_rgba(0,0,0,0.2)]">
+                <div className="lg:col-span-2 p-6 rounded-2xl border border-[#FFFFFF1A] bg-[#12131A] shadow-[0_8px_16px_rgba(0,0,0,0.2)]">
                     <div className="flex justify-between items-center mb-6">
                         <div>
                             <h3 className="font-semibold text-white">Equity Performance</h3>
@@ -215,15 +216,7 @@ const Dashboard = ({ accountData, equityHistory, connected, eaConnected }) => {
                                     tick={{ fill: '#737373', fontSize: 12 }}
                                     axisLine={{ stroke: '#FFFFFF0A' }}
                                 />
-                                <Tooltip 
-                                    content={CustomTooltip}
-                                    contentStyle={{
-                                        backgroundColor: '#1A1B23',
-                                        border: '1px solid #FFFFFF1A',
-                                        borderRadius: '8px',
-                                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-                                    }}
-                                />
+                                <Tooltip content={CustomTooltip} />
                                 <Area 
                                     type="monotone" 
                                     dataKey="value" 
@@ -238,7 +231,22 @@ const Dashboard = ({ accountData, equityHistory, connected, eaConnected }) => {
                     </div>
                 </div>
 
-                {/* Trading Activity */}
+                {/* Forex Sessions Map */}
+                <div className="p-6 rounded-2xl border border-[#FFFFFF1A] bg-[#12131A] shadow-[0_8px_16px_rgba(0,0,0,0.2)]">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h3 className="font-semibold text-white">Market Sessions</h3>
+                            <p className="text-xs text-[#737373] mt-1">Active trading sessions</p>
+                        </div>
+                    </div>
+                    <div className="h-[300px] w-full">
+                        <ForexSessionsMap />
+                    </div>
+                </div>
+            </div>
+
+            {/* Trading Activity */}
+            <div className="mt-6">
                 <div className="p-6 rounded-2xl border border-[#FFFFFF1A] bg-[#12131A] shadow-[0_8px_16px_rgba(0,0,0,0.2)]">
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="font-semibold text-white">Trading Activity</h3>

@@ -33,6 +33,7 @@ import TradingViewChart from './TradingViewChart';
 import Draggable from 'react-draggable';
 import { colors, componentColors, addOpacity } from '../styles/colors';
 import { ToastContainer } from './Toast';
+import Dashboard from './Dashboard';
 
 // Layout presets with fixed dimensions and positions
 const LAYOUT_PRESETS = {
@@ -43,7 +44,8 @@ const LAYOUT_PRESETS = {
             { i: "chart", x: 0, y: 5, w: 8, h: 17 },
             { i: "account", x: 0, y: 0, w: 8, h: 5 },
             { i: "positions", x: 8, y: 9, w: 4, h: 13 },
-            { i: "orders", x: 8, y: 0, w: 4, h: 9 }
+            { i: "orders", x: 8, y: 0, w: 4, h: 9 },
+            { i: "dashboard", x: 0, y: 22, w: 12, h: 15 }
         ]
     },
     compact: {
@@ -87,6 +89,18 @@ const WebTerminal = () => {
         margin: null,
         freeMargin: null
     });
+    
+    // Sample equity history data
+    const [equityHistory] = useState([
+        { time: '00:00', value: 10000 },
+        { time: '04:00', value: 10250 },
+        { time: '08:00', value: 10150 },
+        { time: '12:00', value: 10400 },
+        { time: '16:00', value: 10300 },
+        { time: '20:00', value: 10500 },
+        { time: '24:00', value: 10450 }
+    ]);
+
     const [positions, setPositions] = useState([]);
     const [serverConnected, setServerConnected] = useState(false);
     const [eaConnected, setEaConnected] = useState(false);
@@ -1462,6 +1476,19 @@ const WebTerminal = () => {
         );
     };
 
+    const renderDashboard = () => {
+        return (
+            <div key="dashboard" className="bg-[#12131A] rounded-lg overflow-hidden">
+                <Dashboard 
+                    accountData={accountData}
+                    equityHistory={equityHistory}
+                    connected={serverConnected}
+                    eaConnected={eaConnected}
+                />
+            </div>
+        );
+    };
+
     const renderPartialCloseDialog = () => {
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1577,7 +1604,7 @@ const WebTerminal = () => {
             style={{ backgroundColor: colors.background.primary }}>
             {/* Header */}
             {renderTopBar()}
-
+            
             {/* Main content area */}
             <div className="flex-1 overflow-hidden"
                 style={{ backgroundColor: colors.background.primary }}>
@@ -1761,6 +1788,9 @@ const WebTerminal = () => {
                             </div>
                         </div>
                     </div>
+
+                    {/* Dashboard */}
+                    {renderDashboard()}
                 </CustomLayout>
             </div>
 

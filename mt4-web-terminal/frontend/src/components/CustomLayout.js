@@ -42,6 +42,23 @@ export const CustomLayout = ({
         };
     }, []);
 
+    const getComponentTitle = (id) => {
+        switch (id) {
+            case 'chart':
+                return 'Chart';
+            case 'account':
+                return 'Account';
+            case 'positions':
+                return 'Positions';
+            case 'orders':
+                return 'Orders';
+            case 'dashboard':
+                return 'Dashboard';
+            default:
+                return '';
+        }
+    };
+
     const handleResizeStart = (layout, oldItem, newItem, placeholder, e, element) => {
         // Add resize class to indicate active resizing
         element.classList.add('resizing');
