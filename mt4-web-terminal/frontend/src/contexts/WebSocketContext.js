@@ -9,7 +9,7 @@ export const WebSocketProvider = ({ children }) => {
 
     useEffect(() => {
         // Create WebSocket connection
-        const ws = new WebSocket('ws://localhost:8080');
+        const ws = new WebSocket('wss://g1-back.onrender.com');
 
         ws.onopen = () => {
             console.log('Connected to WebSocket');
