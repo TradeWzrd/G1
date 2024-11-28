@@ -74,62 +74,75 @@ const ForexSessionsMap = () => {
         return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} UTC`;
     };
 
+    const getCurrentSessions = () => {
+        const hour = new Date().getUTCHours();
+        const activeSessions = [];
+        
+        // Check all active sessions
+        if (hour >= 22 || hour < 7) {
+            activeSessions.push({
+                name: 'Sydney',
+                time: '22:00-07:00',
+                color: 'emerald-500',
+                isActive: true
+            });
+        }
+        if (hour >= 0 && hour < 9) {
+            activeSessions.push({
+                name: 'Tokyo',
+                time: '00:00-09:00',
+                color: 'blue-500',
+                isActive: true
+            });
+        }
+        if (hour >= 8 && hour < 17) {
+            activeSessions.push({
+                name: 'London',
+                time: '08:00-17:00',
+                color: 'indigo-500',
+                isActive: true
+            });
+        }
+        if (hour >= 13 && hour < 22) {
+            activeSessions.push({
+                name: 'New York',
+                time: '13:00-22:00',
+                color: 'pink-500',
+                isActive: true
+            });
+        }
+
+        // Get the first active session for the circle color
+        const primarySession = activeSessions[0] || {
+            name: 'No Active Sessions',
+            color: 'purple-500',
+            isActive: false
+        };
+
+        // Map Tailwind color classes to hex values for tooltip text
+        const colorToHex = {
+            'emerald-500': '#10B981',
+            'blue-500': '#3B82F6',
+            'indigo-500': '#6366F1',
+            'pink-500': '#EC4899',
+            'purple-500': '#8B5CF6'
+        };
+
+        return {
+            sessions: activeSessions.map(session => ({
+                ...session,
+                hexColor: colorToHex[session.color]
+            })),
+            bg: `bg-${primarySession.color}`,
+            shadow: `shadow-[0_0_10px_${colorToHex[primarySession.color]}]`
+        };
+    };
+
+    const [showTooltip, setShowTooltip] = useState(false);
+    const sessionInfo = getCurrentSessions();
+
     return (
         <div className="w-full h-full flex flex-col overflow-hidden" style={{ minHeight: "300px" }}>
-            {/* Timeline */}
-            <div className="w-full h-8 bg-[#1A1B23] border-b border-[#2D3748] relative flex-shrink-0">
-                {/* Hour markers */}
-                {Array.from({ length: 24 }, (_, i) => (
-                    <div
-                        key={i}
-                        className="absolute top-0 bottom-0 border-l border-[#2D3748] text-[10px] text-[#737373]"
-                        style={{ left: `${(i / 24) * 100}%` }}
-                    >
-                        <span className="absolute -top-4">{i}</span>
-                    </div>
-                ))}
-                
-                {/* Session gradients */}
-                {sessions.map(({ name, time, gradient }) => {
-                    const [start, end] = time.split('-');
-                    const startHour = parseInt(start.split(':')[0]);
-                    const endHour = parseInt(end.split(':')[0]);
-                    const startPercent = (startHour / 24) * 100;
-                    const width = endHour > startHour 
-                        ? ((endHour - startHour) / 24) * 100
-                        : ((24 - startHour + endHour) / 24) * 100;
-
-                    return (
-                        <div
-                            key={name}
-                            className={`absolute h-full bg-gradient-to-r ${gradient}`}
-                            style={{
-                                left: `${startPercent}%`,
-                                width: `${width}%`,
-                            }}
-                        />
-                    );
-                })}
-
-                {/* Current time indicator */}
-                <div
-                    className="absolute top-0 bottom-0 w-0.5 bg-purple-500 z-20"
-                    style={{ 
-                        left: `${timelinePosition}%`,
-                        boxShadow: '0 0 10px #8B5CF6'
-                    }}
-                >
-                    <div className="absolute -bottom-6 left-1/2 transform -translate-x-1/2">
-                        <div className="bg-purple-500 text-white px-2 py-0.5 rounded text-xs">
-                            {formatTime(currentTime).split(' ')[0]}
-                        </div>
-                        <div className="text-[10px] text-[#737373] text-center mt-1">
-                            UTC
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             {/* Map Container */}
             <div className="flex-1 relative overflow-hidden">
                 <ComposableMap
@@ -235,20 +248,66 @@ const ForexSessionsMap = () => {
                 </ComposableMap>
             </div>
 
-            {/* Bottom Controls */}
-            <div className="w-full bg-[#1A1B23] border-t border-[#2D3748] p-2 flex justify-between items-center flex-shrink-0">
-                <div className="flex items-center space-x-4">
-                    {sessions.map(({ name, color, time }) => (
-                        <div key={name} className="flex items-center space-x-2">
-                            <div
-                                className="w-2 h-2 rounded-full"
-                                style={{ backgroundColor: color }}
-                            />
-                            <span className="text-xs text-[#737373]">
-                                {name} ({time})
-                            </span>
+            {/* Bottom Section */}
+            <div className="flex-shrink-0">
+                {/* Session Legend */}
+                <div className="w-full bg-[#1A1B23] border-t border-[#2D3748] p-3 flex items-center justify-between px-4">
+                    {sessions.map(({ name, color, time }) => {
+                        const isActive = sessionInfo.sessions.some(s => s.name === name);
+                        return (
+                            <div 
+                                key={name} 
+                                className={`flex items-center space-x-2 transition-transform duration-300 ${
+                                    isActive ? 'scale-105' : 'opacity-60'
+                                }`}
+                            >
+                                <div
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                        isActive ? 'animate-pulse' : ''
+                                    }`}
+                                    style={{ backgroundColor: color }}
+                                />
+                                <div className="flex flex-col">
+                                    <span className={`text-[11px] text-white ${
+                                        isActive ? 'font-medium' : ''
+                                    }`}>
+                                        {name}
+                                    </span>
+                                    <span className="text-[9px] text-[#737373]">
+                                        {time}
+                                    </span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* Timeline */}
+                <div className="w-full h-3 relative flex items-center px-4">
+                    {/* Base line with gradient */}
+                    <div className="w-full h-[1px] bg-gradient-to-r from-emerald-500/50 via-blue-500/50 via-indigo-500/50 to-pink-500/50"></div>
+
+                    {/* Current time indicator */}
+                    <div
+                        className="absolute top-1/2 -translate-y-1/2 z-20"
+                        style={{ 
+                            left: `${timelinePosition}%`,
+                        }}
+                    >
+                        <div className={`w-2 h-2 rounded-full ${sessionInfo.bg} ${sessionInfo.shadow} cursor-pointer relative`}>
+                            {showTooltip && (
+                                <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 bg-[#1A1B23] text-white px-2 py-1 rounded text-[10px] whitespace-nowrap border border-[#2D3748]">
+                                    <div className="flex flex-col gap-0.5">
+                                        {sessionInfo.sessions.map((session, index) => (
+                                            <div key={index} style={{ color: session.hexColor }}>
+                                                {session.name}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                    ))}
+                    </div>
                 </div>
             </div>
         </div>
