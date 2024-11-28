@@ -7,27 +7,7 @@ const morgan = require('morgan');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ 
-    server,
-    clientTracking: true,
-    maxPayload: 50 * 1024, // 50KB max message size
-    backlog: 10, // Maximum length of pending connections queue
-    perMessageDeflate: {
-        zlibDeflateOptions: {
-            chunkSize: 1024,
-            memLevel: 7,
-            level: 3
-        },
-        zlibInflateOptions: {
-            chunkSize: 10 * 1024
-        },
-        clientNoContextTakeover: true,
-        serverNoContextTakeover: true,
-        serverMaxWindowBits: 10,
-        concurrencyLimit: 10,
-        threshold: 1024
-    }
-});
+const wss = new WebSocket.Server({ server });
 
 // Global variables
 const clients = new Set();
@@ -72,15 +52,6 @@ setInterval(() => {
         }
     }
 }, 10000);
-
-// Clean up disconnected clients periodically
-setInterval(() => {
-    wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.CLOSING || client.readyState === WebSocket.CLOSED) {
-            clients.delete(client);
-        }
-    });
-}, 30000); // Every 30 seconds
 
 // Use text parser instead of JSON parser for MT4 updates
 app.use(express.text());
@@ -577,25 +548,9 @@ function processCommand(command) {
 }
 
 // WebSocket connection handler
-wss.on('connection', (ws, req) => {
-    // Check if we have too many clients
-    if (wss.clients.size > 50) { // Limit to 50 concurrent connections
-        console.log('Too many connections, rejecting new client');
-        ws.close(1013, 'Too many connections');
-        return;
-    }
-
-    // Add client IP rate limiting
-    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    ws.clientIp = clientIp;
-    
-    console.log(`New client connected from ${clientIp}`);
+wss.on('connection', (ws) => {
+    console.log('New client connected');
     clients.add(ws);
-
-    ws.isAlive = true;
-    ws.on('pong', () => {
-        ws.isAlive = true;
-    });
 
     // Send initial state
     if (lastKnownState) {
