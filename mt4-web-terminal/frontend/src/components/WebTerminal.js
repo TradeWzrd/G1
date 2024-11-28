@@ -1357,56 +1357,20 @@ const WebTerminal = () => {
     const renderChart = () => {
         return (
             <div key="chart" className="flex flex-col h-full" style={{ backgroundColor: colors.background.secondary }}>
-                {/* Chart Header */}
-                <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: colors.border.light }}>
-                    <div className="flex items-center gap-2">
-                        {isEditing && <div className="drag-handle w-6 h-6 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center cursor-move">⋮⋮</div>}
-                        <BarChart2 className="w-5 h-5" style={{ color: colors.status.info.base }} />
-                        <h2 className="text-lg font-medium" style={{ color: colors.text.primary }}>Chart</h2>
+                {isEditing && (
+                    <div className="flex items-center p-4 border-b" style={{ borderColor: colors.border.light }}>
+                        <div className="drag-handle w-6 h-6 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center cursor-move">
+                            ⋮⋮
+                        </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                        <select 
-                            value={selectedTimeframe}
-                            onChange={(e) => setSelectedTimeframe(e.target.value)}
-                            className="px-3 py-1.5 rounded-lg text-sm"
-                            style={{ 
-                                backgroundColor: colors.background.primary,
-                                color: colors.text.primary,
-                                borderColor: colors.border.light,
-                                borderWidth: '1px'
-                            }}
-                        >
-                            {timeframes.map(tf => (
-                                <option key={tf} value={tf}>{tf}</option>
-                            ))}
-                        </select>
-                        <select 
-                            value={selectedSymbol}
-                            onChange={(e) => setSelectedSymbol(e.target.value)}
-                            className="px-3 py-1.5 rounded-lg text-sm"
-                            style={{ 
-                                backgroundColor: colors.background.primary,
-                                color: colors.text.primary,
-                                borderColor: colors.border.light,
-                                borderWidth: '1px'
-                            }}
-                        >
-                            {symbols.map(symbol => (
-                                <option key={symbol} value={symbol}>{symbol}</option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
+                )}
 
                 {/* Chart Content */}
-                <div className="flex-1 relative" style={{ backgroundColor: colors.background.primary }}>
+                <div className="flex-1 relative">
                     <TradingViewChart
-                        symbol={selectedSymbol || 'EURUSD'}
-                        interval={selectedTimeframe === '1H' ? '60' : selectedTimeframe}
+                        symbol={selectedSymbol}
+                        interval={selectedTimeframe}
                         theme={theme}
-                        orders={positions.filter(p => p.type >= 2)} // Pending orders
-                        positions={positions.filter(p => p.type < 2)} // Active positions
-                        ws={ws.current}
                     />
                 </div>
             </div>
@@ -1418,7 +1382,7 @@ const WebTerminal = () => {
             <div key="account" className="flex flex-col h-full" style={{ backgroundColor: colors.background.secondary }}>
                 {/* Panel Header */}
                 <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: colors.border.light }}>
-                    <h2 className="flex items-center gap-2 text-lg font-semibold" style={{ color: colors.text.primary }}>
+                    <h2 className="flex items-center gap-2 text-lg font-medium" style={{ color: colors.text.primary }}>
                         {isEditing && <div className="drag-handle w-6 h-6 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center cursor-move">⋮⋮</div>}
                         Account Information
                     </h2>
