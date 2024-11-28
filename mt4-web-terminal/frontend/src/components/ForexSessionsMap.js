@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from 'react-simple-maps';
+import { geoPath } from 'd3-geo';
 
 const geoUrl = "https://unpkg.com/world-atlas@2/countries-110m.json";
 
@@ -49,18 +50,101 @@ const sessions = [
 ];
 
 const ForexSessionsMap = () => {
-    const [activeSession, setActiveSession] = useState(null);
     const [currentTime, setCurrentTime] = useState(new Date());
+    const [activeSession, setActiveSession] = useState(null);
+    const [mapCenter, setMapCenter] = useState([0, 0]);
+    const [mapZoom, setMapZoom] = useState(1.8);
     const [timelinePosition, setTimelinePosition] = useState(0);
+    const [lastInteraction, setLastInteraction] = useState(0);
+    const [isUserInteracting, setIsUserInteracting] = useState(false);
+    const [hoveredSession, setHoveredSession] = useState(null);
+
+    // Get user's timezone offset
+    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const userOffset = new Date().getTimezoneOffset();
+
+    const formatTimeToLocal = (utcTime) => {
+        const [hours, minutes] = utcTime.split(':').map(Number);
+        const utcDate = new Date();
+        utcDate.setUTCHours(hours, minutes || 0);
+        
+        const localDate = new Date(utcDate.getTime() - userOffset * 60000);
+        return localDate.toLocaleTimeString([], { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: true 
+        }).toLowerCase();
+    };
+
+    const formatSessionTime = (timeRange) => {
+        const [start, end] = timeRange.split('-');
+        return `${formatTimeToLocal(start)} - ${formatTimeToLocal(end)}`;
+    };
+
+    const isSessionActive = (timeRange) => {
+        const [startStr, endStr] = timeRange.split('-');
+        let [startHour] = startStr.split(':').map(Number);
+        let [endHour] = endStr.split(':').map(Number);
+        
+        const now = currentTime.getUTCHours();
+        
+        if (startHour > endHour) {
+            return now >= startHour || now < endHour;
+        }
+        return now >= startHour && now < endHour;
+    };
+
+    const getSessionProgress = (timeRange) => {
+        const [startStr, endStr] = timeRange.split('-');
+        let [startHour] = startStr.split(':').map(Number);
+        let [endHour] = endStr.split(':').map(Number);
+        
+        const now = currentTime.getUTCHours();
+        
+        if (startHour > endHour) {
+            if (now >= startHour) {
+                return (now - startHour) / (24 - startHour + endHour);
+            } else {
+                return (now + 24 - startHour) / (24 - startHour + endHour);
+            }
+        }
+        return (now - startHour) / (endHour - startHour);
+    };
+
+    const getFocusedSession = () => {
+        const activeSessions = sessions.filter(session => isSessionActive(session.time));
+        
+        if (activeSessions.length === 0) return null;
+        if (activeSessions.length === 1) return activeSessions[0];
+
+        // Find the session that's just starting or has the least progress
+        const sessionsWithProgress = activeSessions.map(session => ({
+            ...session,
+            progress: getSessionProgress(session.time)
+        }));
+
+        // Priority to sessions in their first 15% over sessions in their last 15%
+        const startingSessions = sessionsWithProgress.filter(s => s.progress < 0.15);
+        if (startingSessions.length > 0) {
+            return startingSessions[0];
+        }
+
+        // Avoid focusing on sessions that are about to end
+        const validSessions = sessionsWithProgress.filter(s => s.progress < 0.85);
+        if (validSessions.length > 0) {
+            return validSessions[0];
+        }
+
+        return sessionsWithProgress[0];
+    };
 
     useEffect(() => {
         const timer = setInterval(() => {
-            const now = new Date();
-            setCurrentTime(now);
+            setCurrentTime(new Date());
             
             // Calculate timeline position based on current hour
-            const hour = now.getUTCHours();
-            const minute = now.getUTCMinutes();
+            const hour = new Date().getUTCHours();
+            const minute = new Date().getUTCMinutes();
             const position = ((hour + minute / 60) / 24) * 100;
             setTimelinePosition(position);
         }, 1000);
@@ -68,123 +152,48 @@ const ForexSessionsMap = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // Get user's timezone offset
-    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const userOffset = new Date().getTimezoneOffset();
-    const userOffsetHours = -userOffset / 60; // Convert to hours and invert (getTimezoneOffset returns opposite sign)
+    // Reset map position if user hasn't interacted for 5 seconds
+    useEffect(() => {
+        if (!isUserInteracting) return;
 
-    // Convert UTC time to local time
-    const convertToLocalTime = (utcHour) => {
-        let localHour = (utcHour + userOffsetHours);
-        
-        // Handle day boundary crossings
-        if (localHour < 0) localHour += 24;
-        if (localHour >= 24) localHour -= 24;
-        
-        return localHour;
-    };
+        const resetTimeout = setTimeout(() => {
+            const timeSinceInteraction = Date.now() - lastInteraction;
+            if (timeSinceInteraction >= 5000) { // 5 seconds
+                setIsUserInteracting(false);
+            }
+        }, 5000);
 
-    // Format time with AM/PM
-    const formatTime = (hour) => {
-        const period = hour >= 12 ? 'PM' : 'AM';
-        let formattedHour = hour % 12 || 12;
-        
-        // Check if the hour is a decimal
-        if (Number.isInteger(formattedHour)) {
-            return `${formattedHour}${period}`;
+        return () => clearTimeout(resetTimeout);
+    }, [lastInteraction]);
+
+    // Update focused session only when user is not interacting
+    useEffect(() => {
+        if (isUserInteracting) return;
+
+        const focusedSession = getFocusedSession();
+        if (focusedSession) {
+            const [longitude, latitude] = focusedSession.coordinates;
+            setMapCenter([longitude, latitude]);
+            setMapZoom(3);
         } else {
-            // Convert decimal .5 to :30
-            formattedHour = Math.floor(formattedHour);
-            return `${formattedHour}:30${period}`;
+            setMapCenter([0, 0]);
+            setMapZoom(1.8);
         }
-    };
+    }, [currentTime, isUserInteracting]);
 
-    // Update session times to show local time
-    const getLocalSessionTime = (utcStart, utcEnd) => {
-        const localStart = convertToLocalTime(utcStart);
-        const localEnd = convertToLocalTime(utcEnd);
-        return `${formatTime(localStart)}-${formatTime(localEnd)}`;
-    };
-
-    const isSessionActive = (sessionTime) => {
-        const [start, end] = sessionTime.split('-');
-        const hour = currentTime.getUTCHours();
-        const startHour = parseInt(start.split(':')[0]);
-        const endHour = parseInt(end.split(':')[0]);
-
-        if (startHour < endHour) {
-            return hour >= startHour && hour < endHour;
-        } else {
-            return hour >= startHour || hour < endHour;
-        }
-    };
-
-    const getCurrentSessions = () => {
-        const hour = new Date().getUTCHours();
-        const activeSessions = [];
-        
-        // Check all active sessions
-        if (hour >= 21 || hour < 6) {
-            activeSessions.push({
-                name: 'Sydney',
-                time: '21:00-06:00',
-                color: 'emerald-500',
-                isActive: true
-            });
-        }
-        if (hour >= 0 && hour < 9) {
-            activeSessions.push({
-                name: 'Tokyo',
-                time: '00:00-09:00',
-                color: 'blue-500',
-                isActive: true
-            });
-        }
-        if (hour >= 7 && hour < 16) {
-            activeSessions.push({
-                name: 'London',
-                time: '07:00-16:00',
-                color: 'indigo-500',
-                isActive: true
-            });
-        }
-        if (hour >= 13 && hour < 22) {
-            activeSessions.push({
-                name: 'New York',
-                time: '13:00-22:00',
-                color: 'pink-500',
-                isActive: true
-            });
-        }
-
-        // Get the first active session for the circle color
-        const primarySession = activeSessions[0] || {
-            name: 'No Active Sessions',
-            color: 'purple-500',
-            isActive: false
-        };
-
-        // Map Tailwind color classes to hex values for tooltip text
-        const colorToHex = {
-            'emerald-500': '#10B981',
-            'blue-500': '#3B82F6',
-            'indigo-500': '#6366F1',
-            'pink-500': '#EC4899',
-            'purple-500': '#8B5CF6'
-        };
-
-        return {
-            sessions: activeSessions.map(session => ({
-                ...session,
-                hexColor: colorToHex[session.color]
-            })),
-            bg: `bg-${primarySession.color}`,
-            shadow: `shadow-[0_0_10px_${colorToHex[primarySession.color]}]`
-        };
+    const handleMapInteraction = () => {
+        setIsUserInteracting(true);
+        setLastInteraction(Date.now());
     };
 
     const [showTooltip, setShowTooltip] = useState(false);
-    const sessionInfo = getCurrentSessions();
+    const sessionInfo = sessions.map(session => ({
+        name: session.name,
+        time: formatSessionTime(session.time),
+        color: session.color,
+        hexColor: session.hexColor,
+        isActive: isSessionActive(session.time)
+    }));
 
     // Generate volume data points for the line graph
     const generateVolumeData = () => {
@@ -278,39 +287,66 @@ const ForexSessionsMap = () => {
     return (
         <div className="w-full h-full flex flex-col overflow-hidden" style={{ minHeight: "300px" }}>
             {/* Map Container */}
-            <div className="flex-1 relative overflow-hidden">
+            <div className="flex-grow relative overflow-hidden">
                 <ComposableMap
-                    projection="geoMercator"
+                    projection="geoEquirectangular"
                     projectionConfig={{
-                        scale: 150,
-                        center: [0, 20]
+                        scale: 180,
+                        rotate: [-10, 0, 0],
+                        center: [0, 0]
                     }}
+                    className="w-full h-full"
                     style={{
-                        width: "100%",
-                        height: "100%",
+                        clipPath: "polygon(0 0, 100% 0, 100% 85%, 0 85%)",
                         backgroundColor: "#12131A"
                     }}
                 >
-                    <ZoomableGroup center={[0, 20]} zoom={1.5}>
+                    <ZoomableGroup 
+                        center={mapCenter}
+                        zoom={mapZoom}
+                        maxZoom={4}
+                        minZoom={1.5}
+                        onMoveStart={handleMapInteraction}
+                        onMoveEnd={({ coordinates, zoom }) => {
+                            setMapCenter(coordinates);
+                            setMapZoom(zoom);
+                            handleMapInteraction();
+                        }}
+                    >
+                        <defs>
+                            <filter id="glow">
+                                <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+
                         <Geographies geography={geoUrl}>
                             {({ geographies }) =>
-                                geographies.map((geo) => {
-                                    if (geo.properties.name === "Antarctica") return null;
-                                    return (
+                                geographies
+                                    .filter(geo => {
+                                        return !["Antarctica"].includes(geo.properties.CONTINENT);
+                                    })
+                                    .map((geo) => (
                                         <Geography
                                             key={geo.rsmKey}
                                             geography={geo}
-                                            fill="#1A1B23"
-                                            stroke="#FFFFFF0A"
-                                            strokeWidth={0.5}
+                                            fill="#1E1F2E"
+                                            stroke="#FFFFFF"
+                                            strokeOpacity={0.15}
+                                            strokeWidth={0.75}
                                             style={{
                                                 default: { outline: 'none' },
-                                                hover: { outline: 'none', fill: '#2D3748' },
+                                                hover: { 
+                                                    fill: '#2D3748',
+                                                    transition: 'all 250ms',
+                                                },
                                                 pressed: { outline: 'none' },
                                             }}
                                         />
-                                    );
-                                })
+                                    ))
                             }
                         </Geographies>
 
@@ -323,16 +359,46 @@ const ForexSessionsMap = () => {
                                     transition={{ duration: 0.5 }}
                                 >
                                     <Marker coordinates={coordinates}>
+                                        {/* Hover Area - Invisible larger circle for consistent hover */}
+                                        <circle
+                                            r={35}
+                                            fill="transparent"
+                                            style={{ cursor: 'pointer' }}
+                                            onMouseEnter={() => setHoveredSession(name)}
+                                            onMouseLeave={() => setHoveredSession(null)}
+                                        />
+
+                                        {/* Outer Glow Circle */}
+                                        {isActive && (
+                                            <motion.circle
+                                                r={30}
+                                                fill={`${color}15`}
+                                                stroke={color}
+                                                strokeWidth={0.5}
+                                                strokeOpacity={0.3}
+                                                filter="url(#glow)"
+                                                animate={{
+                                                    r: [30, 35, 30],
+                                                    opacity: [0.5, 0.3, 0.5]
+                                                }}
+                                                transition={{
+                                                    duration: 3,
+                                                    repeat: Infinity,
+                                                    ease: "easeInOut"
+                                                }}
+                                                style={{ pointerEvents: 'none' }}
+                                            />
+                                        )}
+                                        
+                                        {/* Main Circle */}
                                         <motion.circle
-                                            r={isActive ? 25 : 8}
+                                            r={isActive ? 20 : 6}
                                             fill={isActive ? `${color}33` : `${color}11`}
                                             stroke={color}
-                                            strokeWidth={isActive ? 3 : 1}
-                                            onMouseEnter={() => setActiveSession(name)}
-                                            onMouseLeave={() => setActiveSession(null)}
+                                            strokeWidth={isActive ? 2 : 1}
                                             animate={{
-                                                r: isActive ? [25, 30, 25] : 8,
-                                                strokeWidth: isActive ? [3, 4, 3] : 1,
+                                                r: isActive ? [20, 23, 20] : 6,
+                                                strokeWidth: isActive ? [2, 2.5, 2] : 1,
                                                 opacity: isActive ? [1, 0.8, 1] : 0.6
                                             }}
                                             transition={{
@@ -340,10 +406,13 @@ const ForexSessionsMap = () => {
                                                 repeat: Infinity,
                                                 ease: "easeInOut"
                                             }}
+                                            style={{ pointerEvents: 'none' }}
                                         />
+                                        
+                                        {/* Center Dot */}
                                         {isActive && (
                                             <motion.circle
-                                                r={4}
+                                                r={2.5}
                                                 fill={color}
                                                 animate={{
                                                     scale: [1, 1.2, 1],
@@ -354,24 +423,49 @@ const ForexSessionsMap = () => {
                                                     repeat: Infinity,
                                                     ease: "easeInOut"
                                                 }}
+                                                style={{ pointerEvents: 'none' }}
                                             />
                                         )}
                                     </Marker>
-                                    {(activeSession === name || isActive) && (
+
+                                    {/* Session Label */}
+                                    {hoveredSession === name && (
                                         <Marker coordinates={coordinates}>
                                             <foreignObject
-                                                x={-75}
-                                                y={-60}
-                                                width={150}
-                                                height={50}
-                                                style={{ overflow: 'visible' }}
+                                                x={-60}
+                                                y={-45}
+                                                width={120}
+                                                height={40}
+                                                style={{ overflow: 'visible', pointerEvents: 'none' }}
                                             >
-                                                <div className={`${isActive ? 'bg-[#1A1B23] border border-[${color}33]' : 'bg-[#1A1B23]'} text-white px-3 py-2 rounded-lg shadow-lg text-center text-sm`}>
-                                                    <p className="font-semibold">{name}</p>
-                                                    <p className={`text-xs ${isActive ? 'text-green-400' : 'text-[#737373]'}`}>
-                                                        {isActive ? 'ACTIVE' : 'INACTIVE'} • {time}
-                                                    </p>
-                                                </div>
+                                                <motion.div 
+                                                    initial={{ opacity: 0, y: 10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    transition={{ duration: 0.15 }}
+                                                    className={`
+                                                        relative flex items-center justify-center gap-2
+                                                        ${isActive ? 'bg-[#1A1B23]/90 backdrop-blur-md' : 'bg-[#1A1B23]/70'}
+                                                        border border-[${color}30]
+                                                        text-white rounded-lg shadow-lg
+                                                        px-3 py-1.5
+                                                    `}
+                                                    style={{
+                                                        boxShadow: isActive ? `0 0 15px ${color}20` : undefined,
+                                                        pointerEvents: 'none'
+                                                    }}
+                                                >
+                                                    {/* Session Name */}
+                                                    <div className="font-semibold text-[12px]" style={{ color }}>
+                                                        {name}
+                                                    </div>
+                                                    
+                                                    {/* Active Status */}
+                                                    {isActive && (
+                                                        <div className="px-1.5 py-0.5 bg-green-500/90 text-[8px] font-semibold rounded-full text-white">
+                                                            ACTIVE
+                                                        </div>
+                                                    )}
+                                                </motion.div>
                                             </foreignObject>
                                         </Marker>
                                     )}
@@ -532,7 +626,7 @@ const ForexSessionsMap = () => {
                                         {showTooltip && (
                                             <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 bg-[#1A1B23] text-white px-2 py-1 rounded text-[10px] whitespace-nowrap border border-[#2D3748]">
                                                 <div className="flex flex-col gap-0.5">
-                                                    {sessionInfo.sessions.map((session, index) => (
+                                                    {sessionInfo.map((session, index) => (
                                                         <div key={index} style={{ color: session.hexColor }}>
                                                             {session.name}
                                                         </div>
@@ -547,53 +641,77 @@ const ForexSessionsMap = () => {
                     </div>
 
                     {/* Combined Session Info and Volume Label */}
-                    <div className="w-full bg-[#1A1B23] border-t border-[#2D3748] p-3 px-4">
-                        {/* Timezone Info */}
-                        <div className="flex items-center justify-between mb-2">
-                            <div className="text-[12px] text-[#737373] font-medium">
-                                Time Zone - {userTimezone.replace('_', ' ')}
+                    <div className="w-full bg-[#1A1B23] border-t border-[#2D3748]">
+                        {/* Header Section */}
+                        <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#2D3748]">
+                            <div className="flex items-center space-x-1.5">
+                                <div className="w-0.5 h-3 bg-gradient-to-b from-emerald-500 to-pink-500 rounded-full"></div>
+                                <div className="text-[11px] text-white font-medium">
+                                    Time Zone - {userTimezone.replace('_', ' ')}
+                                </div>
                             </div>
-                            <div className={`text-[12px] ${volumeColor} flex items-center space-x-1.5 font-medium`}>
-                                <div className={`w-1.5 h-1.5 rounded-full ${volumeColor.replace('text-', 'bg-')}`}></div>
-                                <span>{currentVolume >= 0.8 ? 'High' : currentVolume >= 0.6 ? 'Medium' : 'Low'} Volume</span>
+                            <div className={`text-[10px] ${volumeColor} flex items-center space-x-1.5 py-0.5 px-2 rounded-full bg-[#2D3748]/30`}>
+                                <div className={`w-1 h-1 rounded-full ${volumeColor.replace('text-', 'bg-')}`}></div>
+                                <span className="font-medium">{currentVolume >= 0.8 ? 'High' : currentVolume >= 0.6 ? 'Medium' : 'Low'} Volume</span>
                             </div>
                         </div>
 
                         {/* Session Grid */}
-                        <div className="grid grid-cols-4 gap-4">
-                            {sessions.map(({ name, color, start, end, gradient }) => {
-                                const isActive = sessionInfo.sessions.some(s => s.name === name);
-                                const localTime = getLocalSessionTime(start, end);
+                        <div className="grid grid-cols-4 gap-0 divide-x divide-[#2D3748]/50">
+                            {sessions.map(({ name, color, time, hexColor }) => {
+                                const isActive = isSessionActive(time);
+                                const localTime = formatSessionTime(time);
                                 
                                 return (
                                     <div 
                                         key={name} 
-                                        className={`flex flex-col transition-all duration-300 ${
-                                            isActive ? 'opacity-100 scale-102' : 'opacity-60'
+                                        className={`flex flex-col p-2 transition-all duration-300 relative ${
+                                            isActive ? 'bg-[#2D3748]/10' : ''
                                         }`}
                                     >
-                                        <div className="flex items-center space-x-2">
+                                        {/* Session Name and Status */}
+                                        <div className="flex items-center space-x-1.5 mb-1">
                                             <div
-                                                className={`w-2 h-2 rounded-full ${
+                                                className={`w-1.5 h-1.5 rounded-full ${
                                                     isActive ? 'animate-pulse' : ''
                                                 }`}
                                                 style={{ backgroundColor: color }}
                                             />
-                                            <span className={`text-[13px] text-white ${
+                                            <span className={`text-[11px] text-white ${
                                                 isActive ? 'font-medium' : ''
                                             }`}>
                                                 {name}
                                             </span>
                                         </div>
-                                        <span className="text-[11px] text-[#737373] ml-4 mt-0.5">
-                                            {localTime}
-                                        </span>
+                                        
+                                        {/* Time Display */}
+                                        <div className="flex flex-col ml-3">
+                                            <span className="text-[10px] text-[#737373]">
+                                                {localTime}
+                                            </span>
+                                            {isActive && (
+                                                <span className="text-[9px] text-emerald-400 mt-0.5 font-medium">
+                                                    ACTIVE NOW
+                                                </span>
+                                            )}
+                                        </div>
+                                        
+                                        {/* Active Indicator */}
+                                        {isActive && (
+                                            <div 
+                                                className="absolute bottom-0 left-0 w-full h-0.5"
+                                                style={{ 
+                                                    background: `linear-gradient(to right, ${color}00, ${color}66, ${color}00)`,
+                                                    boxShadow: `0 0 8px ${color}40`
+                                                }}
+                                            ></div>
+                                        )}
                                     </div>
                                 );
                             })}
                         </div>
                     </div>
-                    <div className="h-3"></div> {/* Bottom spacing */}
+                    <div className="h-2"></div> {/* Bottom spacing */}
                 </div>
             </div>
         </div>
