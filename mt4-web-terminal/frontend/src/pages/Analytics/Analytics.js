@@ -16,11 +16,12 @@ const Analytics = () => {
 
     // Handle incoming websocket messages
     useEffect(() => {
-        if (!lastMessage?.data) return;
+        if (!lastMessage) return;
         
         try {
-            const data = lastMessage.data;
-            if (data.startsWith('HISTORY|')) {
+            // Handle string messages (HISTORY data)
+            if (typeof lastMessage.data === 'string' && lastMessage.data.startsWith('HISTORY|')) {
+                const data = lastMessage.data;
                 const trades = data.split(';').map(tradeStr => {
                     const [
                         prefix, ticket, symbol, type, openTime, closeTime,
@@ -45,6 +46,7 @@ const Analytics = () => {
                 setTradeHistory(trades);
                 setIsLoading(false);
             }
+            // Ignore other message types
         } catch (err) {
             console.error('Error processing trade history:', err);
             setError('Failed to process trade data');
