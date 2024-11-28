@@ -29,7 +29,7 @@ import { CustomLayout } from './CustomLayout';
 import { Dialog } from './Dialog';
 import SettingsPanel from './SettingsPanel';
 import '../styles/edit-mode.css';
-import Chart from './Chart';
+import TradingViewChart from './TradingViewChart';
 import Draggable from 'react-draggable';
 import { colors, componentColors, addOpacity } from '../styles/colors';
 import { ToastContainer } from './Toast';
@@ -1354,7 +1354,7 @@ const WebTerminal = () => {
         );
     };
 
-    const renderChartPanel = () => {
+    const renderChart = () => {
         return (
             <div key="chart" className="flex flex-col h-full" style={{ backgroundColor: colors.background.secondary }}>
                 {/* Chart Header */}
@@ -1399,93 +1399,17 @@ const WebTerminal = () => {
                 </div>
 
                 {/* Chart Content */}
-                <div className="flex-1 p-4" style={{ backgroundColor: colors.background.primary }}>
-                    {/* Chart placeholder - replace with actual chart component */}
-                    <div className="w-full h-full rounded-lg border flex items-center justify-center"
-                        style={{ 
-                            borderColor: colors.border.light,
-                            color: colors.text.muted
-                        }}
-                    >
-                        <span>Chart Area</span>
-                    </div>
+                <div className="flex-1 relative" style={{ backgroundColor: colors.background.primary }}>
+                    <TradingViewChart
+                        symbol={selectedSymbol || 'EURUSD'}
+                        interval={selectedTimeframe === '1H' ? '60' : selectedTimeframe}
+                        theme={theme}
+                        orders={positions.filter(p => p.type >= 2)} // Pending orders
+                        positions={positions.filter(p => p.type < 2)} // Active positions
+                        ws={ws.current}
+                    />
                 </div>
             </div>
-        );
-    };
-
-    const renderSettingsPanel = () => {
-        return (
-            <Dialog
-                isOpen={isSettingsOpen}
-                onClose={() => setIsSettingsOpen(false)}
-                title="Styling"
-                className="w-[480px]"
-            >
-                <div className="space-y-6">
-                    {/* Layout Section */}
-                    <div>
-                        <h3 className="text-sm font-medium mb-2 text-white/80">Layout</h3>
-                        <div className="space-y-2">
-                            {/* Layout Presets */}
-                            <div className="grid grid-cols-2 gap-2 mb-3">
-                                {Object.entries(LAYOUT_PRESETS).map(([key, preset]) => (
-                                    <button
-                                        key={key}
-                                        onClick={() => {
-                                            setLayoutState({ currentLayout: preset.layout });
-                                            localStorage.setItem('layoutSettings', JSON.stringify(preset.layout));
-                                        }}
-                                        className="p-3 rounded-lg border border-[#3B82F6]/20 text-white/80 hover:bg-[#3B82F6]/10 transition-all text-left"
-                                    >
-                                        <div className="text-sm font-medium">{preset.name}</div>
-                                        <div className="text-xs text-white/50 mt-1">{preset.description}</div>
-                                    </button>
-                                ))}
-                            </div>
-                            
-                            {/* Edit Layout Button */}
-                            <button
-                                onClick={() => setIsEditing(!isEditing)}
-                                className={`w-full px-4 py-2 rounded-lg border transition-all ${
-                                    isEditing
-                                        ? 'border-[#10B981] bg-[#10B981]/10 text-[#10B981]'
-                                        : 'border-[#3B82F6]/20 text-white/80 hover:bg-[#3B82F6]/10'
-                                }`}
-                            >
-                                {isEditing ? 'Finish Editing' : 'Edit Layout'}
-                            </button>
-                            {isEditing && (
-                                <div className="space-y-2">
-                                    <button
-                                        onClick={saveLayout}
-                                        className="w-full px-4 py-2 rounded-lg bg-[#10B981] hover:bg-[#10B981]/90 text-white transition-all"
-                                    >
-                                        Save Layout
-                                    </button>
-                                    <button
-                                        onClick={resetLayout}
-                                        className="w-full px-4 py-2 rounded-lg border border-red-500 text-red-500 hover:bg-red-500/10 transition-all"
-                                    >
-                                        Reset to Default
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Theme Section */}
-                    <div>
-                        <h3 className="text-sm font-medium mb-2 text-white/80">Theme</h3>
-                        <button
-                            onClick={toggleTheme}
-                            className="w-full px-4 py-2 rounded-lg border border-[#3B82F6]/20 text-white/80 hover:bg-[#3B82F6]/10 transition-all"
-                        >
-                            {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
-                        </button>
-                    </div>
-                </div>
-            </Dialog>
         );
     };
 
@@ -1698,7 +1622,7 @@ const WebTerminal = () => {
                     className={`h-full ${isEditing ? 'layout-edit-mode' : ''}`}
                 >
                     {/* Chart */}
-                    {renderChartPanel()}
+                    {renderChart()}
 
                     {/* Account Information */}
                     {renderAccountInfo()}

@@ -1,0 +1,34 @@
+.tradingview-chart {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.tradingview-chart iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+/* Custom styles for order markers */
+.tv-chart-order-line {
+    stroke-width: 1;
+    stroke-dasharray: 3, 3;
+}
+
+.tv-chart-position-marker {
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.tv-chart-sl-line {
+    stroke: #FF5252;
+    stroke-width: 1;
+    stroke-dasharray: 2, 2;
+}
+
+.tv-chart-tp-line {
+    stroke: #4CAF50;
+    stroke-width: 1;
+    stroke-dasharray: 2, 2;
+}
