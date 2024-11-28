@@ -1371,6 +1371,8 @@ const WebTerminal = () => {
                         symbol={selectedSymbol}
                         interval={selectedTimeframe}
                         theme={theme}
+                        positions={positions}
+                        orders={[]} // We'll handle pending orders separately if needed
                     />
                 </div>
             </div>

@@ -9,6 +9,13 @@ const TradingViewChart = memo(({
     positions = []
 }) => {
     const container = useRef();
+    const widgetRef = useRef(null);
+
+    // Debug log to check positions
+    useEffect(() => {
+        console.log('Positions:', positions);
+        console.log('Orders:', orders);
+    }, [positions, orders]);
 
     useEffect(() => {
         const createWidget = () => {
@@ -16,26 +23,13 @@ const TradingViewChart = memo(({
 
             const widget = document.createElement('div');
             widget.className = 'tradingview-chart-container';
-            widget.style.height = '100%'; 
+            widget.style.height = '100%';
             widget.style.width = '100%';
             widget.style.position = 'relative';
+            widget.id = 'tv_chart_container';
 
             container.current.innerHTML = '';
             container.current.appendChild(widget);
-
-            // Create a wrapper for the TradingView widget
-            const widgetWrapper = document.createElement('div');
-            widgetWrapper.style.position = 'absolute';
-            widgetWrapper.style.top = '0';
-            widgetWrapper.style.left = '0';
-            widgetWrapper.style.right = '0';
-            widgetWrapper.style.bottom = '0';
-            widget.appendChild(widgetWrapper);
-
-            const script = document.createElement('script');
-            script.src = 'https://s3.tradingview.com/tv.js'; 
-            script.type = 'text/javascript';
-            script.async = true;
 
             const config = {
                 "autosize": true,
@@ -53,7 +47,7 @@ const TradingViewChart = memo(({
                 "backgroundColor": colors.background.primary,
                 "gridColor": colors.border.light,
                 "allow_symbol_change": true,
-                "container_id": "tradingview_chart",
+                "container_id": "tv_chart_container",
                 "show_popup_button": true,
                 "popup_width": "1000",
                 "popup_height": "650",
@@ -88,13 +82,7 @@ const TradingViewChart = memo(({
                     "chart_events",
                     "marks_context_menu",
                     "show_object_tree",
-                    "property_pages",
-                    "chart_property_page_trading",
-                    "chart_property_page_style",
-                    "chart_property_page_scales",
-                    "chart_property_page_background",
-                    "chart_property_page_timezone_sessions",
-                    "chart_property_page_events_alerts"
+                    "property_pages"
                 ],
                 "enabled_features": [
                     "header_widget",
@@ -107,37 +95,10 @@ const TradingViewChart = memo(({
                     "disable_resolution_rebuild",
                     "keep_left_toolbar_visible_on_small_screens",
                     "drawing_templates",
-                    "left_toolbar"
+                    "left_toolbar",
+                    "support_multicharts",
+                    "display_market_status"
                 ],
-                "charts_storage_url": "https://saveload.tradingview.com",
-                "client_id": "tradingview.com",
-                "charts_storage_api_version": "1.1",
-                "toolbar": true,
-                "time_frames": [
-                    { text: "1m", resolution: "1" },
-                    { text: "5m", resolution: "5" },
-                    { text: "15m", resolution: "15" },
-                    { text: "30m", resolution: "30" },
-                    { text: "1h", resolution: "60" },
-                    { text: "4h", resolution: "240" },
-                    { text: "1D", resolution: "D" },
-                    { text: "1W", resolution: "W" },
-                    { text: "1M", resolution: "M" }
-                ],
-                "drawings_access": {
-                    "type": "all",
-                    "tools": [
-                        { "name": "LineToolTrendLine", "grayed": false },
-                        { "name": "LineToolHorzLine", "grayed": false },
-                        { "name": "LineToolVertLine", "grayed": false },
-                        { "name": "LineToolFibRetracement", "grayed": false },
-                        { "name": "LineToolRectangle", "grayed": false },
-                        { "name": "LineToolCircle", "grayed": false },
-                        { "name": "LineToolArrow", "grayed": false },
-                        { "name": "LineToolText", "grayed": false },
-                        { "name": "LineToolBrush", "grayed": false }
-                    ]
-                },
                 "overrides": {
                     "mainSeriesProperties.style": 1,
                     "mainSeriesProperties.candleStyle.upColor": colors.status.success.base,
@@ -158,28 +119,153 @@ const TradingViewChart = memo(({
                     "paneProperties.leftAxisProperties.visible": true,
                     "paneProperties.rightAxisProperties.visible": true
                 },
+                "studies_overrides": {
+                    "volume.volume.color.0": colors.status.error.base,
+                    "volume.volume.color.1": colors.status.success.base,
+                },
+                "time_frames": [
+                    { text: "1m", resolution: "1" },
+                    { text: "5m", resolution: "5" },
+                    { text: "15m", resolution: "15" },
+                    { text: "30m", resolution: "30" },
+                    { text: "1h", resolution: "60" },
+                    { text: "4h", resolution: "240" },
+                    { text: "1D", resolution: "D" },
+                    { text: "1W", resolution: "W" },
+                    { text: "1M", resolution: "M" }
+                ],
                 "width": "100%",
                 "height": "100%"
             };
 
+            const script = document.createElement('script');
+            script.src = 'https://s3.tradingview.com/tv.js';
+            script.async = true;
+
             script.onload = () => {
-                new window.TradingView.widget({
-                    ...config,
-                    container_id: widgetWrapper.id = 'tv_chart_container'
-                });
+                if (window.TradingView) {
+                    widgetRef.current = new window.TradingView.widget({
+                        ...config,
+                        container_id: 'tv_chart_container',
+                        onChartReady: () => {
+                            console.log('Chart ready, adding markers...');
+                            addMarkersToChart();
+                        }
+                    });
+                }
             };
 
-            widget.appendChild(script);
+            document.head.appendChild(script);
 
             return () => {
                 if (container.current) {
                     container.current.innerHTML = '';
                 }
+                if (script.parentNode) {
+                    script.parentNode.removeChild(script);
+                }
+                widgetRef.current = null;
             };
         };
 
         createWidget();
     }, [symbol, interval, theme]);
+
+    const addMarkersToChart = () => {
+        if (!widgetRef.current || !widgetRef.current.chart) {
+            console.log('Chart not ready yet');
+            return;
+        }
+
+        const chart = widgetRef.current.chart();
+        console.log('Adding markers for positions:', positions.length);
+
+        // Clear existing markers
+        chart.removeAllShapes();
+
+        // Add position markers
+        positions.forEach((position, index) => {
+            try {
+                const isLong = position.type === 0;
+                const color = isLong ? colors.status.success.base : colors.status.error.base;
+                const text = `${isLong ? '🔼' : '🔽'} ${position.lots}`;
+                
+                console.log('Creating marker for position:', position);
+
+                chart.createShape(
+                    {
+                        time: position.openTime,
+                        price: position.openPrice,
+                        text: text,
+                        overrides: {
+                            shape: isLong ? 'arrow_up' : 'arrow_down',
+                            text: text,
+                            textColor: color,
+                            backgroundColor: color,
+                            fontsize: 12,
+                            bold: true
+                        }
+                    },
+                    {
+                        shape: isLong ? 'arrow_up' : 'arrow_down'
+                    }
+                );
+
+                // Add SL line if exists
+                if (position.sl) {
+                    chart.createShape(
+                        {
+                            time: position.openTime,
+                            price: position.sl,
+                            text: 'SL',
+                            overrides: {
+                                linecolor: colors.status.error.base,
+                                linestyle: 2,
+                                linewidth: 1,
+                                showLabel: true,
+                                textcolor: colors.status.error.base
+                            }
+                        },
+                        {
+                            shape: 'horizontal_line'
+                        }
+                    );
+                }
+
+                // Add TP line if exists
+                if (position.tp) {
+                    chart.createShape(
+                        {
+                            time: position.openTime,
+                            price: position.tp,
+                            text: 'TP',
+                            overrides: {
+                                linecolor: colors.status.success.base,
+                                linestyle: 2,
+                                linewidth: 1,
+                                showLabel: true,
+                                textcolor: colors.status.success.base
+                            }
+                        },
+                        {
+                            shape: 'horizontal_line'
+                        }
+                    );
+                }
+            } catch (error) {
+                console.error('Error creating marker for position:', position, error);
+            }
+        });
+    };
+
+    // Update markers when positions or orders change
+    useEffect(() => {
+        if (widgetRef.current && widgetRef.current.onChartReady) {
+            widgetRef.current.onChartReady(() => {
+                addMarkersToChart();
+            });
+        }
+    }, [positions, orders]);
 
     return (
         <div 
