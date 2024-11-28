@@ -10,7 +10,10 @@ import {
     Wallet,
     Activity,
     TrendingUp,
-    DollarSign 
+    DollarSign,
+    PieChart,
+    BarChart2,
+    Clock
 } from 'lucide-react';
 
 const Dashboard = ({ accountData, equityHistory, connected, eaConnected }) => {
@@ -59,7 +62,9 @@ const Dashboard = ({ accountData, equityHistory, connected, eaConnected }) => {
             icon: Wallet,
             color: 'text-blue-500',
             bgColor: 'bg-blue-500/10',
-            borderColor: 'border-blue-500/20'
+            borderColor: 'border-blue-500/20',
+            change: '+2.5%',
+            changeType: 'positive'
         },
         { 
             title: 'Equity', 
@@ -67,7 +72,9 @@ const Dashboard = ({ accountData, equityHistory, connected, eaConnected }) => {
             icon: DollarSign,
             color: 'text-emerald-500',
             bgColor: 'bg-emerald-500/10',
-            borderColor: 'border-emerald-500/20'
+            borderColor: 'border-emerald-500/20',
+            change: '+1.8%',
+            changeType: 'positive'
         },
         { 
             title: 'Margin', 
@@ -75,7 +82,9 @@ const Dashboard = ({ accountData, equityHistory, connected, eaConnected }) => {
             icon: Activity,
             color: 'text-purple-500',
             bgColor: 'bg-purple-500/10',
-            borderColor: 'border-purple-500/20'
+            borderColor: 'border-purple-500/20',
+            change: '-0.5%',
+            changeType: 'negative'
         },
         { 
             title: 'Free Margin', 
@@ -83,30 +92,46 @@ const Dashboard = ({ accountData, equityHistory, connected, eaConnected }) => {
             icon: TrendingUp,
             color: 'text-amber-500',
             bgColor: 'bg-amber-500/10',
-            borderColor: 'border-amber-500/20'
+            borderColor: 'border-amber-500/20',
+            change: '+1.2%',
+            changeType: 'positive'
         }
     ];
 
     return (
-        <div className="p-6 space-y-6 bg-[#0a0f1a] text-white min-h-screen">
-            {/* Header */}
-            <div className="flex justify-between items-center">
+        <div className="p-6 space-y-6 bg-[#0A0B0D] text-white min-h-screen">
+            {/* Header with Status */}
+            <div className="flex justify-between items-center mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
+                    <h1 className="text-2xl font-bold text-white">
                         Trading Dashboard
                     </h1>
-                    <p className="text-sm text-gray-400">Real-time account overview and analytics</p>
+                    <p className="text-sm text-[#737373]">Real-time account overview and analytics</p>
                 </div>
                 <div className="flex items-center space-x-4">
-                    <div className={`flex items-center px-3 py-1 rounded-full text-sm
-                        ${connected ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
-                        <div className={`w-2 h-2 rounded-full mr-2 ${connected ? 'bg-green-500' : 'bg-red-500'} animate-pulse`}></div>
+                    <div className={`flex items-center px-3 py-1 rounded-full text-sm ${
+                        connected 
+                            ? 'bg-[#10B98110] text-[#10B981]' 
+                            : 'bg-[#EF444410] text-[#EF4444]'
+                    }`}>
+                        <div className={`w-2 h-2 rounded-full mr-2 ${
+                            connected 
+                                ? 'bg-[#10B981]' 
+                                : 'bg-[#EF4444]'
+                        }`}></div>
                         {connected ? 'Connected' : 'Disconnected'}
                     </div>
-                    <div className={`flex items-center px-3 py-1 rounded-full text-sm
-                        ${eaConnected ? 'bg-blue-500/10 text-blue-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
-                        <div className={`w-2 h-2 rounded-full mr-2 ${eaConnected ? 'bg-blue-500' : 'bg-yellow-500'} animate-pulse`}></div>
-                        {eaConnected ? 'EA Connected' : 'EA Disconnected'}
+                    <div className={`flex items-center px-3 py-1 rounded-full text-sm ${
+                        eaConnected 
+                            ? 'bg-[#3B82F610] text-[#3B82F6]' 
+                            : 'bg-[#FFFFFF0A] text-[#737373]'
+                    }`}>
+                        <div className={`w-2 h-2 rounded-full mr-2 ${
+                            eaConnected 
+                                ? 'bg-[#3B82F6]' 
+                                : 'bg-[#737373]'
+                        }`}></div>
+                        EA {eaConnected ? 'Connected' : 'Disconnected'}
                     </div>
                 </div>
             </div>
@@ -114,71 +139,95 @@ const Dashboard = ({ accountData, equityHistory, connected, eaConnected }) => {
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {stats.map((stat, index) => (
-                    <div
-                        key={stat.title}
-                        className={`p-6 rounded-xl border ${stat.borderColor} ${stat.bgColor} backdrop-blur-xl`}
-                    >
-                        <div className="flex flex-col space-y-4">
-                            <div className="flex items-center space-x-3">
-                                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                                    <stat.icon className={`w-5 h-5 ${stat.color}`} />
-                                </div>
-                                <h3 className="text-sm font-medium text-gray-400">{stat.title}</h3>
+                    <div key={index} 
+                         className="p-6 rounded-xl border border-[#FFFFFF1A] bg-[#12131A] hover:bg-[#1A1B23] transition-all duration-300">
+                        <div className="flex justify-between items-start mb-4">
+                            <div className="p-2 rounded-lg bg-[#1A1B23]">
+                                <stat.icon className="w-5 h-5 text-[#3B82F6]" />
                             </div>
-                            <div className="flex items-baseline">
-                                <span className="text-2xl font-bold text-white">
-                                    ${formatCurrency(stat.value)}
-                                </span>
+                            <div className={`px-2 py-1 rounded-md text-xs ${
+                                stat.changeType === 'positive' 
+                                    ? 'bg-[#10B98110] text-[#10B981]' 
+                                    : 'bg-[#EF444410] text-[#EF4444]'
+                            }`}>
+                                {stat.change}
                             </div>
                         </div>
+                        <h3 className="text-[#737373] text-sm mb-1">{stat.title}</h3>
+                        <p className="text-xl font-bold text-white">${formatCurrency(stat.value)}</p>
                     </div>
                 ))}
             </div>
 
-            {/* Chart */}
-            <div className="rounded-xl border border-[#2a3441] bg-[#1a1f2e] p-6">
-                <div className="flex justify-between items-center mb-6">
-                    <div>
-                        <h2 className="text-lg font-bold text-white">Equity Chart</h2>
-                        <p className="text-sm text-gray-400">Real-time equity performance</p>
+            {/* Charts Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+                {/* Equity Chart */}
+                <div className="p-6 rounded-xl border border-[#FFFFFF1A] bg-[#12131A]">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="font-semibold text-white">Equity Performance</h3>
+                        <div className="flex items-center space-x-2">
+                            <button className="px-3 py-1 text-sm rounded-md bg-[#3B82F610] text-[#3B82F6]">1H</button>
+                            <button className="px-3 py-1 text-sm rounded-md bg-[#FFFFFF0A] text-[#737373]">1D</button>
+                            <button className="px-3 py-1 text-sm rounded-md bg-[#FFFFFF0A] text-[#737373]">1W</button>
+                        </div>
                     </div>
-                    <div className={`flex items-center px-3 py-1 rounded-lg text-sm
-                        ${pnl >= 0 ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
-                        <span className="font-medium">
-                            {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)} ({pnlPercentage.toFixed(2)}%)
-                        </span>
+                    <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={equityHistory}>
+                                <defs>
+                                    <linearGradient id="colorEquity" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.1}/>
+                                        <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#FFFFFF0A" />
+                                <XAxis dataKey="time" stroke="#FFFFFF14" />
+                                <YAxis stroke="#FFFFFF14" />
+                                <Tooltip 
+                                    content={CustomTooltip}
+                                    contentStyle={{
+                                        backgroundColor: '#1A1B23F2',
+                                        border: '1px solid #FFFFFF1A'
+                                    }}
+                                />
+                                <Area 
+                                    type="monotone" 
+                                    dataKey="value" 
+                                    stroke="#3B82F6" 
+                                    fillOpacity={1} 
+                                    fill="url(#colorEquity)" 
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
                     </div>
                 </div>
-                <div className="h-[400px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={equityHistory}>
-                            <defs>
-                                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.1}/>
-                                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#2a3441" />
-                            <XAxis 
-                                dataKey="time" 
-                                stroke="#6B7280"
-                                tick={{ fill: '#6B7280' }}
-                            />
-                            <YAxis
-                                stroke="#6B7280"
-                                tick={{ fill: '#6B7280' }}
-                                tickFormatter={(value) => `$${formatCurrency(value)}`}
-                            />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Area
-                                type="monotone"
-                                dataKey="value"
-                                stroke="#3B82F6"
-                                fillOpacity={1}
-                                fill="url(#colorValue)"
-                            />
-                        </AreaChart>
-                    </ResponsiveContainer>
+
+                {/* Trading Activity */}
+                <div className="p-6 rounded-xl border border-[#FFFFFF1A] bg-[#12131A]">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="font-semibold text-white">Trading Activity</h3>
+                        <div className="flex items-center space-x-2">
+                            <Clock className="w-4 h-4 text-[#737373]" />
+                            <span className="text-sm text-[#737373]">Last 24h</span>
+                        </div>
+                    </div>
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-[#1A1B23]">
+                            <div className="flex items-center space-x-3">
+                                <div className="bg-[#10B98110] p-2 rounded-lg">
+                                    <ArrowUpRight className="w-4 h-4 text-[#10B981]" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium text-white">Buy EURUSD</p>
+                                    <p className="text-xs text-[#737373]">0.01 Lots</p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-sm font-medium text-[#10B981]">+$2.35</p>
+                                <p className="text-xs text-[#737373]">12:45 PM</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

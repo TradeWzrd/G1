@@ -39,7 +39,8 @@ string CreateUpdateString()
             data += DoubleToStr(OrderOpenPrice(), 5) + ",";
             data += DoubleToStr(OrderStopLoss(), 5) + ",";
             data += DoubleToStr(OrderTakeProfit(), 5) + ",";
-            data += DoubleToStr(OrderProfit(), 2);
+            data += DoubleToStr(OrderProfit(), 2) + ",";
+            data += StringFormat("%d", OrderOpenTime());  // Add open time as Unix timestamp
             
             firstPosition = false;
         }

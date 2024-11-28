@@ -23,6 +23,11 @@ const TradingPanel = ({ positions = [] }) => {
 
     const formatPrice = (price) => Number(price).toFixed(5);
     const formatLots = (lots) => Number(lots).toFixed(2);
+    const formatTime = (timestamp) => {
+        if (!timestamp) return 'N/A';
+        const date = new Date(timestamp * 1000);
+        return date.toLocaleString();
+    };
 
     const handleSymbolSelect = (symbol) => {
         setSymbolInput(symbol);
@@ -276,6 +281,7 @@ const TradingPanel = ({ positions = [] }) => {
                                         <th className="text-left p-3 font-medium">Type</th>
                                         <th className="text-right p-3 font-medium">Lots</th>
                                         <th className="text-right p-3 font-medium">Open Price</th>
+                                        <th className="text-right p-3 font-medium">Open Time</th>
                                         <th className="text-right p-3 font-medium">S/L</th>
                                         <th className="text-right p-3 font-medium">T/P</th>
                                         <th className="text-right p-3 font-medium">Profit</th>
@@ -297,6 +303,7 @@ const TradingPanel = ({ positions = [] }) => {
                                             </td>
                                             <td className="p-3 text-right">{formatLots(position.lots)}</td>
                                             <td className="p-3 text-right">{formatPrice(position.openPrice)}</td>
+                                            <td className="p-3 text-right">{formatTime(position.openTime)}</td>
                                             <td className="p-3 text-right">{formatPrice(position.stopLoss)}</td>
                                             <td className="p-3 text-right">{formatPrice(position.takeProfit)}</td>
                                             <td className={`p-3 text-right font-medium

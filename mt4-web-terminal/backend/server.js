@@ -105,18 +105,19 @@ function parseData(dataString) {
 
         // Parse positions
         if (parts[2] === 'POSITIONS' && parts[3]) {
-            const positions = parts[3].split(';');
-            data.positions = positions.filter(p => p).map(pos => {
-                const [ticket, symbol, type, lots, openPrice, sl, tp, profit] = pos.split(',');
+            const positionsData = parts[3];
+            data.positions = positionsData.split(';').map(position => {
+                const [ticket, symbol, type, lots, openPrice, sl, tp, profit, openTime] = position.split(',');
                 return {
                     ticket: parseInt(ticket),
                     symbol,
                     type: parseInt(type),
                     lots: parseFloat(lots),
                     openPrice: parseFloat(openPrice),
-                    sl: parseFloat(sl),
-                    tp: parseFloat(tp),
-                    profit: parseFloat(profit)
+                    stopLoss: parseFloat(sl),
+                    takeProfit: parseFloat(tp),
+                    profit: parseFloat(profit),
+                    openTime: parseInt(openTime)
                 };
             });
         }
@@ -276,16 +277,17 @@ app.post('/api/ea-data', (req, res) => {
                 const positionStrings = posData.split(';');
                 positionStrings.forEach(pos => {
                     if (pos) {
-                        const [ticket, symbol, type, lots, openPrice, sl, tp, profit] = pos.split(',');
+                        const [ticket, symbol, type, lots, openPrice, sl, tp, profit, openTime] = pos.split(',');
                         positions.push({
                             ticket: parseInt(ticket),
                             symbol,
                             type: parseInt(type),
                             lots: parseFloat(lots),
                             openPrice: parseFloat(openPrice),
-                            sl: parseFloat(sl),
-                            tp: parseFloat(tp),
-                            profit: parseFloat(profit)
+                            stopLoss: parseFloat(sl),
+                            takeProfit: parseFloat(tp),
+                            profit: parseFloat(profit),
+                            openTime: parseInt(openTime)
                         });
                     }
                 });
